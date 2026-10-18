@@ -1,0 +1,76 @@
+# Personal and generated data (never commit)
+data/
+*.xlsx
+*.docx
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp4
+*.mov
+
+# Vault and credentials
+data/vault/
+*.txt
+!PREREQUISITES.md
+!README.md
+!SETUP.md
+!LICENSE
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Test and debug scripts (local development)
+test_*.py
+fix_*.py
+check_*.py
+fetch_*.py
+search_*.py
+read_*.py
+convert_*.py
+prompt.txt
+*.md~
+fresh*.txt
+*_output.txt
+
+# Playwright
+playwright-report/
+test-results/
+.playwright-mcp/
+
+# Generated reports
+job-search-report-*.md

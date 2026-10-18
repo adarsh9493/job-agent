@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+  ATS-friendly cover letter template (under one page).
+  Single column, standard fonts, no images/headers/footers.
+  Placeholders use {{TOKEN}}. tailoring/SKILL.md fills this in temp, renders to PDF, then deletes the HTML.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{FULL_NAME}} — Cover Letter</title>
+    <style>
+      @page {
+        size: Letter;
+        margin: 0.8in;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: Arial, Helvetica, "Segoe UI", sans-serif;
+        font-size: 11pt;
+        line-height: 1.5;
+        color: #111;
+        margin: 0;
+      }
+      .header {
+        margin-bottom: 18pt;
+      }
+      .name {
+        font-size: 17pt;
+        font-weight: bold;
+        margin-bottom: 2pt;
+      }
+      .contact {
+        font-size: 9.5pt;
+        color: #333;
+      }
+      .date {
+        margin-bottom: 14pt;
+      }
+      .recipient {
+        margin-bottom: 14pt;
+      }
+      p {
+        margin: 0 0 11pt;
+      }
+      .signoff {
+        margin-top: 16pt;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="name">{{FULL_NAME}}</div>
+      <div class="contact">
+        {{PHONE}} &nbsp;|&nbsp; {{EMAIL}} &nbsp;|&nbsp; {{LOCATION}} &nbsp;|&nbsp; {{LINKEDIN}}
+      </div>
+    </div>
+
+    <div class="date">{{DATE}}</div>
+
+    <div class="recipient">
+      {{HIRING_MANAGER_LINE}}<br />
+      {{COMPANY}}<br />
+      {{COMPANY_ADDRESS_LINE}}
+    </div>
+
+    <p>Dear {{SALUTATION}},</p>
+
+    <p>{{OPENING_PARAGRAPH}}</p>
+
+    <p>{{BODY_PARAGRAPH_1}}</p>
+
+    <p>{{BODY_PARAGRAPH_2}}</p>
+
+    <p>{{CLOSING_PARAGRAPH}}</p>
+
+    <p class="signoff">Sincerely,<br /><br /></p>
+    <div class="name">{{FULL_NAME}}</div>
+  </body>
+</html>

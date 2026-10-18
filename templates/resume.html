@@ -1,0 +1,129 @@
+<!doctype html>
+<!--
+  ATS-friendly resume template.
+  Rules: single column, standard fonts, no tables, no columns, no images, no headers/footers.
+  Placeholders use {{TOKEN}}. Repeatable blocks are marked with the comment tags shown.
+  tailoring/SKILL.md fills this in temp, renders to PDF, then deletes the HTML.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{FULL_NAME}} — Resume</title>
+    <style>
+      @page {
+        size: Letter;
+        margin: 0.6in 0.7in;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: Arial, Helvetica, "Segoe UI", sans-serif;
+        font-size: 10.5pt;
+        line-height: 1.35;
+        color: #111;
+        margin: 0;
+      }
+      h1 {
+        font-size: 20pt;
+        margin: 0 0 2pt;
+        letter-spacing: 0.5pt;
+      }
+      .contact {
+        font-size: 9.5pt;
+        color: #333;
+        margin-bottom: 10pt;
+      }
+      h2 {
+        font-size: 11pt;
+        text-transform: uppercase;
+        letter-spacing: 1pt;
+        border-bottom: 1pt solid #111;
+        padding-bottom: 2pt;
+        margin: 12pt 0 6pt;
+      }
+      .summary {
+        margin: 0;
+      }
+      .skills {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .skills li {
+        margin: 0 0 2pt;
+      }
+      .job {
+        margin-bottom: 9pt;
+      }
+      .job-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8pt;
+      }
+      .job-title {
+        font-weight: bold;
+      }
+      .job-meta {
+        white-space: nowrap;
+        color: #333;
+        font-size: 9.5pt;
+      }
+      .job-company {
+        font-style: italic;
+      }
+      ul.bullets {
+        margin: 3pt 0 0;
+        padding-left: 16pt;
+      }
+      ul.bullets li {
+        margin-bottom: 2pt;
+      }
+      .edu {
+        margin-bottom: 5pt;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>{{FULL_NAME}}</h1>
+    <div class="contact">
+      {{PHONE}} &nbsp;|&nbsp; {{EMAIL}} &nbsp;|&nbsp; {{LOCATION}}<br />
+      {{LINKEDIN}} &nbsp;|&nbsp; {{PORTFOLIO}}
+    </div>
+
+    <h2>Professional Summary</h2>
+    <p class="summary">{{SUMMARY}}</p>
+
+    <h2>Core Skills</h2>
+    <!-- SKILLS_ITEM: repeat one <li> per skill group -->
+    <ul class="skills">
+      <li><strong>{{SKILL_GROUP_NAME}}:</strong> {{SKILL_GROUP_ITEMS}}</li>
+    </ul>
+
+    <h2>Professional Experience</h2>
+    <!-- EXPERIENCE_ITEM: repeat the entire .job block per role, most recent first -->
+    <div class="job">
+      <div class="job-head">
+        <span class="job-title">{{JOB_TITLE}}</span>
+        <span class="job-meta">{{JOB_DATES}}</span>
+      </div>
+      <div class="job-company">{{COMPANY}} — {{JOB_LOCATION}}</div>
+      <ul class="bullets">
+        <!-- BULLET: repeat one <li> per bullet -->
+        <li>{{BULLET}}</li>
+      </ul>
+    </div>
+
+    <h2>Education</h2>
+    <!-- EDUCATION_ITEM: repeat one .edu block per degree -->
+    <div class="edu">
+      <strong>{{DEGREE}}</strong> — {{SCHOOL}}, {{GRADUATION_YEAR}}
+    </div>
+
+    <h2>Additional</h2>
+    <!-- ADDITIONAL_ITEM: repeat one <li> per item; omit the section if empty -->
+    <ul class="bullets">
+      <li>{{ADDITIONAL_ITEM}}</li>
+    </ul>
+  </body>
+</html>
