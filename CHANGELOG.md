@@ -74,3 +74,19 @@ payload: **56,947 bytes** (~14.2k tokens) across `AGENTS.md` + 8 `SKILL.md` file
   and uses `checkpoint.py save` after each application.
 - Tests: **55/55 pass** (`tests/test_session_runtime.py` added); `validate_all.py` green.
   Session-start payload 6,211 -> **6,502 bytes** (boot briefing included); worst phase 10,109 bytes.
+
+### Phase 4 - Hard-rule gates and credential vault (2026-10-31)
+
+- `scripts/runtime/guard.py` blocks a role unless the session is running with its lock held, the
+  company is approved, the title is not managerial, the tracker confirms no duplicate, no matching
+  legal blocker exists, and the job folder is present. Duplicate-check failures fail closed.
+- `scripts/runtime/presubmit.py` reruns the guard, requires a 0-100 match score and a clean two-pass
+  `review.json`, verifies the resume and any uploaded cover-letter PDF, and logs a presubmit event.
+  Submit is permitted only when it prints `{"ok":true,"submit":true,...}`.
+- `scripts/runtime/creds.py` provides masked `list`/`get`, fill-time `get --reveal`, stdin-only
+  `set`, and `new` (generates and stores without printing). Vault writes are atomic; secrets are
+  never echoed by `set` or `new`.
+- `application-fill` now requires both gates and documented review evidence; `portal-login` uses
+  the credential helper. Adapters regenerated. Tests: **74/74 pass** (`test_guard_presubmit.py`);
+  `validate_all.py` green. Session-start context remains **6,502 B**; canonical skill text is
+  28,548 -> **29,607 B**, with no file over budget.

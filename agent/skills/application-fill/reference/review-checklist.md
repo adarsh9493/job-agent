@@ -36,3 +36,27 @@ Resolve gaps from known profile data; log legal/eligibility blockers and continu
 - Only when both passes are clean: **real-click** the Submit button (never keyboard Enter), wait for
   the confirmation page, save `confirmation_screenshot.png`, archive the folder with
   `python scripts/runtime/archive.py`, then update the tracker.
+
+## Machine-readable evidence
+
+Before running `presubmit.py`, save `<job-folder>/review.json` with this shape:
+
+```json
+{
+  "pass1": true,
+  "pass2": true,
+  "legal_unknowns": [],
+  "required_empty": [],
+  "attachments": {
+    "resume": "Adarsh_Ramanujapuram_Resume.pdf",
+    "cover": "Adarsh_Ramanujapuram_CoverLetter.pdf"
+  },
+  "cover_field": "uploaded"
+}
+```
+
+Both pass values must be `true`; the unknown/empty lists must be empty. `attachments.resume` must
+be the visible resume PDF filename. When a cover-letter field is offered, attach the letter and
+record its filename with `cover_field: "uploaded"`; when the portal has no cover-letter field,
+record `cover: null` and `cover_field: "not_offered"`. The gate independently checks the PDF files
+for extractable text, the profile name, and unresolved template tokens.
