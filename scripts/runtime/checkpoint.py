@@ -16,6 +16,7 @@ import events
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STATE = REPO_ROOT / "data" / "state" / "state.json"
 LOCK_MAX_AGE_HOURS = 12
+SCHEMA_VERSION = 1
 SESSION_COUNTERS = (
     "applied",
     "failed",
@@ -36,6 +37,12 @@ def validate_state(state, expected_mode=None):
         return ["checkpoint root must be a JSON object"]
 
     errors = []
+    schema_version = state.get("schema_version")
+    if not _is_nonnegative_integer(schema_version):
+        errors.append("schema_version must be a non-negative integer; run migrate_state.py --apply")
+    elif schema_version != SCHEMA_VERSION:
+        errors.append(f"unsupported schema_version {schema_version}; expected {SCHEMA_VERSION}")
+
     mode = state.get("mode")
     if mode not in ("running", "stopped"):
         errors.append("mode must be 'running' or 'stopped'")
@@ -287,6 +294,7 @@ def initialize_state(path):
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     state = {
         "version": 1,
+        "schema_version": SCHEMA_VERSION,
         "mode": "stopped",
         "started_at": "",
         "last_stop_at": "",

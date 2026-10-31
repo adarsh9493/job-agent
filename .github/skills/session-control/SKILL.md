@@ -14,6 +14,7 @@ machine.
 1. Run `python scripts/runtime/boot.py` and read the briefing. If `lock` is `held:*`, another run
    is active - stop and report it. If `data/state/state.json` is missing, run
    `python scripts/runtime/checkpoint.py init`; otherwise run
+   `python scripts/runtime/migrate_state.py --apply` (idempotent; creates a sibling backup), then
    `python scripts/runtime/checkpoint.py validate`; do not proceed with malformed state.
 2. Read the tracker summary (`python scripts/runtime/tracker.py summary`), pending legal blockers,
    approved company list, application-folder evidence, and rotating sweep cursor. Complete

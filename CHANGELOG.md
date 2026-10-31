@@ -90,3 +90,18 @@ payload: **56,947 bytes** (~14.2k tokens) across `AGENTS.md` + 8 `SKILL.md` file
   the credential helper. Adapters regenerated. Tests: **74/74 pass** (`test_guard_presubmit.py`);
   `validate_all.py` green. Session-start context remains **6,502 B**; canonical skill text is
   28,548 -> **29,607 B**, with no file over budget.
+
+### Phase 5 - Maintain mode and schema migration (2026-10-31)
+
+- Added `schema_version: 1` to initialized checkpoints and made validation reject missing or
+  unsupported schemas. `scripts/runtime/migrate_state.py` plans by default; `--apply` preserves all
+  fields, creates a byte-exact sibling backup, and atomically adds the schema marker. It is
+  idempotent and tested only on temporary fixtures; personal `data/` was not migrated.
+- `session-control` applies migration before validating an existing checkpoint. The fixture-only
+  `dry_run.py` exercises the migration and keeps Submit stubbed.
+- Added `scripts/maintenance/MAINTAIN.md` with branch/edit/validate/dry-run protocol. README explains
+  switching harnesses/models and lists the final tree: `agent/` canonical instructions,
+  `scripts/{runtime,scan,tailoring,maintenance}`, `templates/`, `tests/`, and gitignored `data/`.
+- Tests: **78/78 pass**; adapter check and `validate_all.py` green. Context before -> after:
+  session start **6,502 -> 6,502 B**, skill text **29,607 -> 29,701 B**, worst phase **10,109 B**;
+  all budgets remain clear.

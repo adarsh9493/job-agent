@@ -49,10 +49,10 @@ agent/            Canonical instructions - the only place to edit
   MODEL_POLICY.md   light vs heavy model tiers
   mcp.json          canonical MCP servers
 scripts/          Executable helpers (no policy text)
-  runtime/          boot, state, answers, tracker, sweep, guard, presubmit, checkpoint, archive
+  runtime/          boot, state, answers, tracker, sweep, guard, presubmit, checkpoint, migration, archive
   scan/             fresh_scan
   tailoring/        gen, build_all, render_pdf, verify_pdf, match_score
-  maintenance/      sync_adapters, context_report, validate_all, dry_run
+  maintenance/      MAINTAIN.md, sync_adapters, context_report, validate_all, dry_run
 templates/        resume.html, cover-letter.html (ATS-friendly)
 tests/            contract tests + fixtures (never real data)
 data/             All personal + generated data (gitignored)
@@ -64,6 +64,18 @@ Generated adapters - never hand-edited, rebuilt by `scripts/maintenance/sync_ada
 
 Edit `agent/` and run `python scripts/maintenance/sync_adapters.py`; the tests fail if an adapter
 drifts from canonical.
+
+## Switch harness or model
+
+- **Harness:** keep workflow instructions in `agent/skills/` and edit the capability-to-tool map in
+  `agent/TOOLS.md` for the new harness. Update its generated adapter through
+  `scripts/maintenance/sync_adapters.py`; do not edit generated copies by hand. Verify the harness
+  provides the required browser, shell, file-read, file-write, and mail capabilities before a run.
+- **Model:** choose the cheapest model that can do the current task and follow
+  `agent/MODEL_POLICY.md` for light vs. heavy work. Checkpoints make mid-run model changes safe;
+  models may not override hard rules or guess unknown eligibility answers.
+- After a switch, run `python scripts/maintenance/validate_all.py`. See
+  [`scripts/maintenance/MAINTAIN.md`](scripts/maintenance/MAINTAIN.md) before changing the agent.
 
 ## Notes
 

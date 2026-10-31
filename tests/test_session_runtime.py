@@ -1,4 +1,4 @@
-"""Session runtime tests (Phase 3): briefing, run lock, idempotent checkpoints, event log.
+"""Session runtime tests: briefing, run lock, schema migration, checkpoints, event log.
 
 All tests use temporary fixtures; nothing here reads or writes real `data/`.
 """
@@ -19,10 +19,12 @@ for sub in ("scan", "runtime", "tailoring", "maintenance"):
 import boot
 import checkpoint
 import events
+import migrate_state
 
 BRIEF_LIMIT = 2048
 
 STATE = {
+    "schema_version": checkpoint.SCHEMA_VERSION,
     "mode": "running",
     "started_at": "2026-10-31T08:00:00-04:00",
     "last_stop_at": "",
@@ -194,6 +196,53 @@ class IdempotentCheckpointTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "session_stats.applied"):
                 checkpoint.save(path, {"session_stats": {"applied": -1}})
             self.assertEqual(path.read_text(encoding="utf-8"), before)
+
+
+class SchemaMigrationTests(unittest.TestCase):
+    def test_legacy_migration_adds_schema_version_without_losing_fields(self):
+        legacy = {"version": 1, "mode": "stopped", "queue": [{"company": "Fixture"}]}
+        migrated, changed = migrate_state.migrate_payload(legacy)
+        self.assertTrue(changed)
+        self.assertEqual(migrated["schema_version"], checkpoint.SCHEMA_VERSION)
+        self.assertEqual(migrated["queue"], legacy["queue"])
+        self.assertNotIn("schema_version", legacy)
+
+    def test_migration_is_idempotent_and_rejects_future_schema(self):
+        current = {"schema_version": checkpoint.SCHEMA_VERSION}
+        unchanged, changed = migrate_state.migrate_payload(current)
+        self.assertFalse(changed)
+        self.assertEqual(unchanged, current)
+        with self.assertRaisesRegex(migrate_state.MigrationError, "newer"):
+            migrate_state.migrate_payload({"schema_version": checkpoint.SCHEMA_VERSION + 1})
+
+    def test_file_migration_plans_without_writing_and_backs_up_before_apply(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "state.json"
+            original = '{"version":1,"mode":"stopped"}\n'
+            path.write_text(original, encoding="utf-8")
+
+            plan = migrate_state.migrate_file(path)
+            self.assertTrue(plan["changed"])
+            self.assertFalse(plan["applied"])
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+            result = migrate_state.migrate_file(path, apply=True)
+            backup = Path(result["backup"])
+            self.assertTrue(result["applied"])
+            self.assertEqual(backup.read_text(encoding="utf-8"), original)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["schema_version"],
+                             checkpoint.SCHEMA_VERSION)
+            again = migrate_state.migrate_file(path, apply=True)
+            self.assertFalse(again["changed"])
+
+    def test_checkpoint_requires_supported_schema_version(self):
+        state = dict(STATE)
+        state.pop("schema_version")
+        self.assertTrue(any("schema_version" in error for error in
+                            checkpoint.validate_state(state)))
+        state["schema_version"] = checkpoint.SCHEMA_VERSION + 1
+        self.assertTrue(any("unsupported schema_version" in error for error in
+                            checkpoint.validate_state(state)))
 
 
 class EventLogTests(unittest.TestCase):

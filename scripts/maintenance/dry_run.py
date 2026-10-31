@@ -18,14 +18,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "scan"))
+sys.path.insert(0, str(ROOT / "scripts" / "runtime"))
 
 import fresh_scan  # noqa: E402
+import migrate_state  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
 
 def run() -> dict:
     steps: dict[str, object] = {}
+
+    migrated, changed = migrate_state.migrate_payload({"version": 1, "mode": "stopped"})
+    assert changed and migrated["schema_version"] == migrate_state.CURRENT_SCHEMA
+    steps["migration"] = "fixture-only"
 
     feed = (FIXTURES / "successfactors_feed.xml").read_text(encoding="utf-8")
     postings = fresh_scan.parse_successfactors_rss(feed)
