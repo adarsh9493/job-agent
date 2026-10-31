@@ -15,6 +15,7 @@ from pathlib import Path
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import gen  # noqa: E402  (sibling module)
+from file_ops import publish_file  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APPS = PROJECT_ROOT / "data" / "applications" / "current"
@@ -81,8 +82,8 @@ for cfg in configs:
         if result.returncode:
             print(result.stderr[-500:], file=sys.stderr)
             sys.exit(result.returncode)
-        os.replace(temp_rpdf, rpdf)
-        os.replace(temp_cpdf, cpdf)
+        publish_file(temp_rpdf, rpdf)
+        publish_file(temp_cpdf, cpdf)
         print("-" * 80)
     finally:
         rh.unlink(missing_ok=True)

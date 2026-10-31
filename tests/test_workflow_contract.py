@@ -23,6 +23,7 @@ for sub in ("scan", "runtime", "tailoring", "maintenance"):
 import archive
 import checkpoint
 import fresh_scan
+import file_ops
 import gen
 import sweep
 import verify_pdf
@@ -371,6 +372,28 @@ class SweepTests(unittest.TestCase):
 
 
 class TailoringTests(unittest.TestCase):
+    def test_publish_file_handles_cross_drive_source_and_preserves_destination_on_failure(self):
+        with tempfile.TemporaryDirectory() as source_dir, \
+                tempfile.TemporaryDirectory(dir=ROOT) as destination_dir:
+            source = Path(source_dir) / "resume.pdf"
+            destination = Path(destination_dir) / "resume.pdf"
+            source.write_bytes(b"verified-pdf")
+            destination.write_bytes(b"old-pdf")
+
+            file_ops.publish_file(source, destination)
+
+            self.assertEqual(destination.read_bytes(), b"verified-pdf")
+            self.assertFalse(source.exists())
+            self.assertEqual(list(Path(destination_dir).glob("*.tmp")), [])
+
+            source.write_bytes(b"replacement-pdf")
+            with patch.object(file_ops.os, "replace", side_effect=OSError("publish failed")):
+                with self.assertRaisesRegex(OSError, "publish failed"):
+                    file_ops.publish_file(source, destination)
+            self.assertEqual(destination.read_bytes(), b"verified-pdf")
+            self.assertTrue(source.is_file())
+            self.assertEqual(list(Path(destination_dir).glob("*.tmp")), [])
+
     def test_pdf_verification_enforces_length_name_and_token_checks(self):
         valid, errors = verify_pdf.verify_text("A" * 200 + " Jane Doe", "Jane Doe", 200)
         self.assertTrue(valid)

@@ -120,3 +120,14 @@ payload: **56,947 bytes** (~14.2k tokens) across `AGENTS.md` + 8 `SKILL.md` file
   the first run; the only tracker additions were reviewed skips, and personal `data/` is unchanged
   by this maintenance phase. Context before -> after: session start **6,502 -> 6,486 B**, skill
   text **29,701 -> 29,864 B**, worst phase **10,109 -> 10,093 B**; no budget is exceeded.
+
+### Cross-volume PDF publishing fix (2026-10-31)
+
+- `build_all.py` now publishes verified PDFs through `file_ops.publish_file`: copy into a temporary
+  file on the destination volume, atomically replace the final file, then remove the source. This
+  avoids Windows cross-drive `os.replace` failures and preserves an existing destination if publish
+  fails. The first real Zoox attempt used direct rendering as a workaround; no application data was
+  changed by this maintenance fix.
+- Added a source/destination-volume test, including failure preservation. Tests: **83/83 pass**;
+  `validate_all.py` green. Context is unchanged by the PDF helper: session start **6,873 B**, worst
+  phase **10,480 B**, all budgets clear.
