@@ -57,3 +57,20 @@ payload: **56,947 bytes** (~14.2k tokens) across `AGENTS.md` + 8 `SKILL.md` file
   `SKILL.md` + on-demand `reference/` files. Every file is inside its budget.
 - Tests: **45/45 pass** (`tests/test_data_slices.py` added); `validate_all.py` green.
   Session-start payload **17,526 -> 6,211 bytes** (~1,553 tokens); worst phase 9,818 bytes.
+
+### Phase 3 - Session runtime (2026-10-31)
+
+- `scripts/runtime/boot.py`: one-screen JSON briefing (mode, current job/step, queue head, cursor,
+  next approved company, interview blocks, legal blockers, onboarding flags, lock state) capped at
+  2,048 B - currently **291 B**. Missing files are reported as `mode: missing`, never fatal, so a
+  fresh clone can boot.
+- `data/state/run.lock`: single-run lock written by `checkpoint.py set-mode running`, released by
+  `set-mode stopped` / `checkpoint.py release`. A dead or >12 h lock is replaced automatically; a
+  live foreign lock refuses the start.
+- `checkpoint.py save --file <partial.json>` merges a partial checkpoint atomically and validates
+  it; repeating the same mode or payload is a no-op (no duplicate timestamps, no duplicate events).
+- `data/state/events.jsonl`: append-only event log (`events.py append|tail|count`) with key-based
+  dedupe over the recent window. `session-control` now boots from the briefing, checks the lock,
+  and uses `checkpoint.py save` after each application.
+- Tests: **55/55 pass** (`tests/test_session_runtime.py` added); `validate_all.py` green.
+  Session-start payload 6,211 -> **6,502 bytes** (boot briefing included); worst phase 10,109 bytes.

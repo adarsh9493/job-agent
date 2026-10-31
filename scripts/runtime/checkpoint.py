@@ -2,14 +2,20 @@
 """Validate and safely update the persisted application-session checkpoint."""
 
 import argparse
+import ctypes
+import hashlib
 import json
 import os
+import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
+import events
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STATE = REPO_ROOT / "data" / "state" / "state.json"
+LOCK_MAX_AGE_HOURS = 12
 SESSION_COUNTERS = (
     "applied",
     "failed",
@@ -113,12 +119,115 @@ def write_state_atomically(path, state):
             temporary_path.unlink()
 
 
+def _sidecar(state_path, name):
+    return Path(state_path).parent / name
+
+
+def _pid_alive(pid) -> bool:
+    """True when the process that wrote the lock is still running."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    if sys.platform == "win32":
+        process_query_limited_information = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            process_query_limited_information, False, pid
+        )
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def lock_status(path=None):
+    """Describe the run lock without changing it."""
+    path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
+    try:
+        info = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"held": False}
+    if not isinstance(info, dict):
+        return {"held": False}
+    since = info.get("since")
+    age_hours = None
+    try:
+        started = datetime.fromisoformat(str(since))
+        age_hours = (datetime.now().astimezone() - started).total_seconds() / 3600
+    except (ValueError, TypeError):
+        age_hours = None
+    alive = _pid_alive(info.get("pid"))
+    stale = (not alive) or (age_hours is not None and age_hours > LOCK_MAX_AGE_HOURS)
+    return {
+        "held": not stale,
+        "pid": info.get("pid"),
+        "since": since,
+        "stale": stale,
+        "age_hours": None if age_hours is None else round(age_hours, 1),
+    }
+
+
+def acquire_lock(path=None):
+    """Take the single-run lock, replacing a stale lock left by a dead process."""
+    path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
+    status = lock_status(path)
+    if status.get("held"):
+        if status.get("pid") == os.getpid():
+            return {"ok": True, "pid": os.getpid(), "since": status.get("since"),
+                    "reused": True}
+        return {"ok": False, "reason": "another run holds the lock", **status}
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"pid": os.getpid(), "since": now}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return {"ok": True, "pid": os.getpid(), "since": now,
+            "stale_replaced": bool(status.get("stale"))}
+
+
+def release_lock(path=None):
+    """Remove the run lock; safe to call when no lock exists."""
+    path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
+    try:
+        path.unlink()
+        return {"ok": True, "released": True}
+    except FileNotFoundError:
+        return {"ok": True, "released": False}
+
+
+def _merge(base, patch):
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
 def set_mode(path, mode):
-    """Atomically set the lifecycle mode and its corresponding timestamp."""
+    """Atomically set the lifecycle mode; repeating the same mode is a no-op."""
     state = read_state(path)
     errors = validate_state(state)
     if errors:
         raise ValueError("; ".join(errors))
+
+    lock_path = _sidecar(path, "run.lock")
+    if state.get("mode") == mode:
+        if mode == "running":
+            lock = acquire_lock(lock_path)
+            if not lock.get("ok"):
+                raise ValueError(lock["reason"])
+        return state
+
+    if mode == "running":
+        lock = acquire_lock(lock_path)
+        if not lock.get("ok"):
+            raise ValueError(lock["reason"])
 
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     state["mode"] = mode
@@ -132,7 +241,41 @@ def set_mode(path, mode):
     if errors:
         raise ValueError("; ".join(errors))
     write_state_atomically(path, state)
+    events.append(
+        "mode",
+        key=f"mode:{mode}:{now}",
+        path=_sidecar(path, "events.jsonl"),
+        mode=mode,
+        cursor=state["search_cursor"]["company"],
+        queued=len(state["queue"]),
+    )
+    if mode == "stopped":
+        release_lock(lock_path)
     return state
+
+
+def save(path, payload):
+    """Merge a partial checkpoint and validate it; repeating the same payload is safe."""
+    if not isinstance(payload, dict):
+        raise ValueError("checkpoint payload must be a JSON object")
+    state = read_state(path)
+    merged = _merge(state, json.loads(json.dumps(payload)))
+    errors = validate_state(merged)
+    if errors:
+        raise ValueError("; ".join(errors))
+    merged["last_updated"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    write_state_atomically(path, merged)
+    digest = hashlib.sha1(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:16]
+    events.append(
+        "checkpoint",
+        key=f"save:{digest}",
+        path=_sidecar(path, "events.jsonl"),
+        fields=sorted(payload),
+        mode=merged.get("mode"),
+    )
+    return merged
 
 
 def initialize_state(path):
@@ -160,6 +303,7 @@ def initialize_state(path):
         raise ValueError("; ".join(errors))
     path.parent.mkdir(parents=True, exist_ok=True)
     write_state_atomically(path, state)
+    release_lock(_sidecar(path, "run.lock"))
     return state
 
 
@@ -183,6 +327,14 @@ def main(argv=None):
         "set-mode", help="atomically set mode and update its lifecycle timestamp"
     )
     mode_command.add_argument("mode", choices=("running", "stopped"))
+    save_command = commands.add_parser(
+        "save", help="merge and validate a partial checkpoint (idempotent)"
+    )
+    save_command.add_argument(
+        "--file", type=Path, help="JSON file to merge (default: stdin)"
+    )
+    commands.add_parser("release", help="remove the run lock")
+    commands.add_parser("lock-status", help="report whether a run lock is held")
     args = parser.parse_args(argv)
 
     try:
@@ -195,6 +347,20 @@ def main(argv=None):
                 return 1
         elif args.command == "init":
             state = initialize_state(args.state)
+        elif args.command == "save":
+            if args.file:
+                payload = json.loads(args.file.read_text(encoding="utf-8-sig"))
+            else:
+                payload = json.load(sys.stdin)
+            state = save(args.state, payload)
+        elif args.command == "release":
+            result = release_lock(_sidecar(args.state, "run.lock"))
+            print(f"Run lock released: {result['released']}")
+            return 0
+        elif args.command == "lock-status":
+            status = lock_status(_sidecar(args.state, "run.lock"))
+            print(json.dumps(status, separators=(",", ":")))
+            return 0
         else:
             state = set_mode(args.state, args.mode)
     except (OSError, json.JSONDecodeError, ValueError) as error:
@@ -202,8 +368,9 @@ def main(argv=None):
         return 1
 
     cursor = state["search_cursor"]["company"]
+    label = "Checkpoint saved" if args.command == "save" else "Checkpoint valid"
     print(
-        f"Checkpoint valid: mode={state['mode']}, cursor={cursor}, "
+        f"{label}: mode={state['mode']}, cursor={cursor}, "
         f"queued={len(state['queue'])}"
     )
     return 0

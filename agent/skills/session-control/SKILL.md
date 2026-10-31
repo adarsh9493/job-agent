@@ -10,8 +10,9 @@ machine.
 
 ## Start
 
-1. If `data/state/state.json` does not exist, run
-   `python scripts/runtime/checkpoint.py init`. Otherwise run
+1. Run `python scripts/runtime/boot.py` and read the briefing. If `lock` is `held:*`, another run
+   is active - stop and report it. If `data/state/state.json` is missing, run
+   `python scripts/runtime/checkpoint.py init`; otherwise run
    `python scripts/runtime/checkpoint.py validate`; do not proceed with malformed state.
 2. Read the tracker summary (`python scripts/runtime/tracker.py summary`), pending legal blockers,
    approved company list, application-folder evidence, and rotating sweep cursor. Complete
@@ -30,7 +31,8 @@ machine.
 7. Continue to the next role after a legal/eligibility blocker or portal failure; save the blocker or
    incomplete status and resume at the next company.
 8. After each application or safely skipped role, persist its tracker status, queue, cursor, current
-   company/job/step, and session counters before proceeding. Run
+   company/job/step, and session counters with one atomic
+   `python scripts/runtime/checkpoint.py save --file <partial.json>` before proceeding. Run
    `python scripts/runtime/checkpoint.py validate --expected-mode running`; never begin another
    application until the checkpoint is valid and readable.
 
@@ -40,7 +42,9 @@ Finish or safely abort the active form; persist its exact company/job/form step 
 archive confirmed folders; update the tracker summary and session counters. Then run
 `python scripts/runtime/checkpoint.py set-mode stopped` followed by
 `python scripts/runtime/checkpoint.py validate --expected-mode stopped`. The helper atomically
-updates `mode`, `last_stop_at`, and `last_updated`; confirm the cursor and queue in its output. Do
+updates `mode`, `last_stop_at`, and `last_updated`, releases the run lock, and appends a mode event
+to `data/state/events.jsonl` (recent history: `python scripts/runtime/events.py tail --limit 5`).
+Confirm the cursor and queue in its output. Do
 not begin another application after stop is requested. Close the remaining browser page when the
 available controls support it; otherwise leave only the reused page and report that it could not be
 closed. A later `start` resumes from that verified checkpoint.
