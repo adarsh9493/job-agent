@@ -15,7 +15,8 @@ machine.
    `python scripts/runtime/checkpoint.py init`; otherwise run
    `python scripts/runtime/migrate_state.py --apply` (idempotent; creates a sibling backup), then
    `python scripts/runtime/checkpoint.py validate`; do not proceed with malformed state.
-2. Read the tracker summary (`python scripts/runtime/tracker.py summary`), pending legal blockers,
+2. Run `python scripts/runtime/tracker.py init` (safe and non-overwriting) so a fresh clone has the
+   required workbook, then read the tracker summary (`python scripts/runtime/tracker.py summary`), pending legal blockers,
    approved company list, application-folder evidence, and rotating sweep cursor. Complete
    onboarding when needed. Reconcile conflicts and initialize both cursor fields from the approved
    list before setting a non-empty cursor. Then run

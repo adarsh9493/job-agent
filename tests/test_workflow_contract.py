@@ -217,7 +217,7 @@ class PolicyTests(unittest.TestCase):
         contents = read(ROOT / "agent" / "skills" / "session-control" / "SKILL.md").lower()
         start, stop = contents.split("## stop", maxsplit=1)
 
-        for requirement in ("migrate_state.py --apply", "validate", "state.json", "tracker", "legal blockers",
+        for requirement in ("migrate_state.py --apply", "tracker.py init", "validate", "state.json", "tracker", "legal blockers",
                             "sweep cursor", "reconcile"):
             self.assertIn(requirement, start)
         for requirement in ("exact company/job/form step", "remaining queue",

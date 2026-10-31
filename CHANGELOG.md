@@ -131,3 +131,14 @@ payload: **56,947 bytes** (~14.2k tokens) across `AGENTS.md` + 8 `SKILL.md` file
 - Added a source/destination-volume test, including failure preservation. Tests: **83/83 pass**;
   `validate_all.py` green. Context is unchanged by the PDF helper: session start **6,873 B**, worst
   phase **10,480 B**, all budgets clear.
+
+### Fresh-PC setup documentation and tracker bootstrap (2026-10-31)
+
+- Reconciled README, SETUP, and PREREQUISITES: documented the Windows/Python 3.12/Node 20 baseline,
+  pinned dependencies, harness capability checks, user-configured mail, scanner-only discovery,
+  browser/CAPTCHA policy, and the fact that `data/` is not part of a clone.
+- Added non-overwriting `tracker.py init` to create the required Applications/Legend workbook,
+  headers, status colors, and dropdown; session start now initializes it before reading the summary.
+- Tests: **84/84 pass**; all `validate_all.py` gates green. Context before -> after: session start
+  **6,873 -> 6,878 B**, skill text **29,864 -> 30,059 B**, worst phase **10,480 -> 10,557 B**;
+  `AGENTS.md` is **5,108 B** (budget 5,120 B), with no file over budget.

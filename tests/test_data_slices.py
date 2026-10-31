@@ -167,6 +167,30 @@ class TrackerSliceTests(unittest.TestCase):
             self.assertEqual(summary["by_status"], {"Interview": 1})
             self.assertEqual(summary["responses"][0]["status"], "Interview")
 
+    def test_init_creates_the_required_tracker_and_is_non_overwriting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "applications.xlsx"
+            result = tracker.initialize(path)
+            self.assertTrue(result["ok"])
+            self.assertTrue(result["created"])
+
+            import openpyxl
+            workbook = openpyxl.load_workbook(path)
+            self.assertEqual(workbook.sheetnames, ["Applications", "Legend"])
+            sheet = workbook["Applications"]
+            self.assertEqual(tuple(cell.value for cell in sheet[1]), tracker.COLUMNS)
+            self.assertTrue(any("J2:J1000" in str(rule.sqref)
+                                for rule in sheet.data_validations.dataValidation))
+            self.assertEqual(tuple(cell.value for cell in workbook["Legend"][1]),
+                             ("Status", "Fill", "Font", "Bold"))
+            workbook.close()
+
+            original = path.read_bytes()
+            again = tracker.initialize(path)
+            self.assertTrue(again["ok"])
+            self.assertFalse(again["created"])
+            self.assertEqual(path.read_bytes(), original)
+
     def test_update_without_a_match_reports_cleanly(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = self.workbook(Path(temp_dir) / "applications.xlsx")

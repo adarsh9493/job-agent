@@ -1,12 +1,22 @@
 # Job Agent
 
-An autonomous, reusable job-application agent that runs in any agent harness with a browser tool and
-a mail tool (VS Code/Copilot, Claude Code, OpenCode, or another). It researches companies, finds
-fresh job postings on company career portals, tailors your resume and cover letter to each role,
-works through a visible browser, and tracks applications in an Excel workbook.
+An autonomous job-application workflow designed for any harness that provides the required browser,
+shell, file, and mail capabilities. Generated adapters exist for VS Code/Copilot, Claude Code, and
+OpenCode; see [agent/TOOLS.md](agent/TOOLS.md). This repository documents and validates a Windows
+setup, but every new harness still needs its capabilities checked before a run.
 
-All personal data lives in `data/` and is **gitignored**, so this project can be published to
-GitHub for other users without exposing anyone's information.
+All personal data lives in `data/` and is **gitignored**. A clone does not include a profile, resume,
+tracker, portal credentials, or browser profile; each user completes onboarding on their own copy.
+
+## Operating constraints
+
+- Background job discovery uses `scripts/scan/fresh_scan.py` only. The visible browser is opened only
+  for a specific scanner candidate as the start of an application attempt, not for broad searching.
+  Companies without a scanner adapter remain unsearched for that run.
+- A visible CAPTCHA must be solved by the user; the agent never bypasses it. If unresolved, the
+  application is recorded as manual-needed.
+- `validate_all.py` is offline validation. It does not test the user's browser/mail authentication or
+  prove that a live application can be submitted.
 
 ## Requirements
 
@@ -16,8 +26,9 @@ details. Install and authenticate the required tools before the first run.
 ## How to start
 
 1. Open the repository root in your agent harness (VS Code with Copilot, Claude Code, OpenCode, ...).
-2. Confirm the workflow skills are discovered and the `playwright` MCP server is connected. Adapters
-   for each harness are generated; see [agent/TOOLS.md](agent/TOOLS.md) for the discovery paths.
+2. Confirm skills are discovered and the harness provides `browser`, `shell`, `file-read`,
+   `file-write`, and `mail` capabilities. Harness setup details are in [SETUP.md](SETUP.md) and
+   [agent/TOOLS.md](agent/TOOLS.md).
 3. Say **`start`**.
 4. On the first run the agent walks you through **onboarding** (profile, work authorization,
    target roles, locations, answers bank) and builds your target company list.
@@ -27,16 +38,19 @@ details. Install and authenticate the required tools before the first run.
 ## How to stop
 
 - Say **`stop`** — the agent finishes or safely aborts the current form, saves state, and halts.
-  The next `start` resumes exactly where it left off.
+  The next `start` resumes from the verified checkpoint.
 - Say **`I found a job`** — the agent stops permanently, summarizes stats, and asks whether to
   keep the setup for later.
 
 ## What you provide (one time)
 
 - Your master resume and master cover letter → `data/master/`
-- A Gmail/MCPEmails connection available to Copilot for narrowly scoped portal OTPs and application
-  responses; configure it in your VS Code user environment and do not commit credentials.
-- One shared portal password (or let the agent generate one) → stored in `data/vault/credentials.txt`
+- A user-configured mail tool for narrowly scoped portal OTPs and application responses. Configure
+  it in your harness's private environment; never commit mail credentials.
+- Portal credentials, if needed, stay under `data/vault/`; reads are always masked. If a password
+  cannot be entered safely through the chosen harness, enter it manually.
+- Work authorization, locations, salary, and target-company preferences during first-run onboarding.
+- The tracker workbook is created on first start and stays local under `data/tracker/`.
 
 ## Layout
 
@@ -49,7 +63,8 @@ agent/            Canonical instructions - the only place to edit
   MODEL_POLICY.md   light vs heavy model tiers
   mcp.json          canonical MCP servers
 scripts/          Executable helpers (no policy text)
-  runtime/          boot, state, answers, tracker, sweep, guard, presubmit, checkpoint, migration, archive
+  runtime/          boot, state, answers, tracker, queue, sweep, events, creds, mail, guard,
+                    presubmit, checkpoint, migration, archive
   scan/             fresh_scan
   tailoring/        gen, build_all, render_pdf, verify_pdf, match_score
   maintenance/      MAINTAIN.md, sync_adapters, context_report, validate_all, dry_run
@@ -79,8 +94,9 @@ drifts from canonical.
 
 ## Notes
 
-- The visible browser is used from portal login through final submission; everything else runs
-  in the background.
+- Follow the browser-only-for-a-specific-application and scanner-only discovery rules in `AGENTS.md`.
+- Portal mail authentication is external to this repository; without it, OTP and response checks
+  cannot be automated.
 - Use the `start` flow as the supported workflow; Python scripts are helper tools, not a
   standalone application runner.
 - Search is strictly limited to eligible automotive ADAS/AD validation roles.

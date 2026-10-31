@@ -13,7 +13,7 @@ python scripts/runtime/boot.py
 python scripts/runtime/state.py get|set <path> [v]
 python scripts/runtime/sweep.py --next
 python scripts/runtime/answers.py find|add "<q>"
-python scripts/runtime/tracker.py has-applied|add|update|summary
+python scripts/runtime/tracker.py init|has-applied|add|update|summary
 python scripts/runtime/companies.py show "<name>"
 python scripts/runtime/mail.py query --domain <d> --since <date>
 python scripts/runtime/queue.py view

@@ -2,6 +2,7 @@
 """Query and update the Excel tracker without loading the workbook into the conversation.
 
     python scripts/runtime/tracker.py has-applied --company "Lucid Motors" --job-id 123
+    python scripts/runtime/tracker.py init
     python scripts/runtime/tracker.py summary
     python scripts/runtime/tracker.py add --company X --title Y --status Applied --match 74
     python scripts/runtime/tracker.py update --company X --job-id 123 --status Interview \
@@ -12,8 +13,11 @@ Output is one line of JSON. The workbook schema is fixed (see agent/skills/track
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import tempfile
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from _common import TRACKER_PATH, emit, norm, today
 
@@ -36,6 +40,80 @@ RESPONSES = ("Interview", "Offer", "Rejected")
 def _workbook(path=TRACKER_PATH):
     import openpyxl
     return openpyxl.load_workbook(path)
+
+
+def initialize(path=TRACKER_PATH) -> dict:
+    """Create the empty, policy-compliant tracker without overwriting an existing workbook."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    path = Path(path)
+    if path.exists():
+        try:
+            openpyxl.load_workbook(path, read_only=True).close()
+        except Exception as error:
+            return {"ok": False, "created": False,
+                    "error": f"tracker exists but is unreadable; left untouched: {error}"}
+        return {"ok": True, "created": False, "path": str(path)}
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Applications"
+    sheet.append(COLUMNS)
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = f"A1:L1"
+
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    for cell in sheet[1]:
+        cell.fill = header_fill
+        cell.font = Font(color="FFFFFF", bold=True)
+        cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    widths = (14, 26, 38, 22, 48, 28, 14, 12, 22, 38, 60, 12)
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[openpyxl.utils.get_column_letter(index)].width = width
+    for row in range(2, 1001):
+        sheet.cell(row=row, column=COLUMNS.index("Notes") + 1).alignment = Alignment(
+            wrap_text=True, vertical="top"
+        )
+
+    validation_values = ",".join(STATUS_COLORS)
+    validation = DataValidation(
+        type="list", formula1=f'"{validation_values}"', allow_blank=True
+    )
+    sheet.add_data_validation(validation)
+    validation.add("J2:J1000")
+
+    legend = workbook.create_sheet("Legend")
+    legend.append(("Status", "Fill", "Font", "Bold"))
+    for cell in legend[1]:
+        cell.fill = header_fill
+        cell.font = Font(color="FFFFFF", bold=True)
+    for status, (fill, font, bold) in STATUS_COLORS.items():
+        legend.append((status, fill, font, bold))
+        cell = legend.cell(row=legend.max_row, column=1)
+        cell.fill = PatternFill("solid", fgColor=fill)
+        cell.font = Font(color=font, bold=bold)
+    for column, width in (("A", 42), ("B", 12), ("C", 12), ("D", 10)):
+        legend.column_dimensions[column].width = width
+
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", suffix=".xlsx", prefix=f".{path.stem}.",
+            dir=path.parent, delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+        workbook.save(temporary)
+        if path.exists():
+            return {"ok": True, "created": False, "path": str(path)}
+        os.replace(temporary, path)
+        return {"ok": True, "created": True, "path": str(path)}
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def _rows(workbook) -> list[dict]:
@@ -163,6 +241,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
+    initialize_command = sub.add_parser("init", help="create the empty tracker if missing")
+    initialize_command.add_argument("--file", type=Path, default=TRACKER_PATH,
+                                    help="tracker workbook path")
+
     check = sub.add_parser("has-applied", help="duplicate check")
     check.add_argument("--company", required=True)
     check.add_argument("--job-id")
@@ -184,6 +266,10 @@ def main(argv: list[str] | None = None) -> int:
         edit.add_argument(flag)
 
     args = parser.parse_args(argv)
+    if args.command == "init":
+        result = initialize(args.file)
+        emit(result)
+        return 0 if result.get("ok") else 1
     if args.command == "has-applied":
         emit(has_applied(args.company, args.job_id, args.url, args.title))
         return 0

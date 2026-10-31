@@ -12,7 +12,8 @@ responses.
 ## File
 
 `data/tracker/applications.xlsx` — two sheets: `Applications` (the data) and `Legend` (the color
-key). Create it with openpyxl if missing, using exactly the columns and colors below.
+key). Initialize a fresh clone with `python scripts/runtime/tracker.py init`; it creates the exact
+schema if missing and leaves an existing workbook untouched.
 
 ## Columns (exactly these 12, in this order — do not add, remove, or reorder)
 
