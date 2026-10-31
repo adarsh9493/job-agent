@@ -1,260 +1,73 @@
-# Setup Guide
+# Fresh-PC setup
 
-Complete setup instructions for the Job Agent — an autonomous job-application agent that runs inside OpenCode.
+The workflow runs inside an agent harness; it is not a standalone job-search/apply program. The
+validated local baseline is Windows 10/11 with Python 3.12, Node.js 20+, Git, and a harness that
+provides the required browser, shell, file-read, file-write, and mail capabilities. The repository
+contains adapters for VS Code/Copilot, Claude Code, and OpenCode, but each harness's tools and mail
+authentication must be checked on the new machine. See [agent/TOOLS.md](agent/TOOLS.md).
 
----
+## Install runtime dependencies
 
-## Quick Start (TL;DR)
+From the repository root in PowerShell:
 
-```bash
-# 1. Clone the repo
-git clone <your-fork-url>
-cd job-agent
-
-# 2. Install prerequisites (Windows PowerShell)
-winget install --id Google.Chrome
-node --version     # expect v20+
-python --version   # expect 3.11+
-git --version
-python -m pip install --upgrade playwright
-python -m playwright install chromium
-python -m pip install openpyxl
-
-# 3. Install OpenCode
-npm install -g @opencode/opencode@latest
-
-# 4. Configure MCP servers
-opencode mcp add playwright -- npx -y @playwright/mcp@latest
-opencode mcp add gmail -- python -m gmail_mcp
-opencode mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem <absolute-path-to-job-agent>
-opencode mcp add github -- npx -y @modelcontextprotocol/server-github
-opencode mcp add context7 -- npx -y @context7/mcp-server
-opencode mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
-
-# 5. Open in OpenCode and start
-opencode .
-# In OpenCode chat: say "start"
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m playwright install chromium
+node --version
 ```
 
----
+`requirements.txt` contains the pinned Python dependencies. Node.js 20+ supplies `npx`, used by the
+pinned `@playwright/mcp@0.0.84` browser server. A system Chrome installation is not used to render
+PDFs; Playwright's installed Chromium is used. If using another OS, adapt the venv commands and run
+all validation gates before a RUN session.
 
-## Detailed Prerequisites
+## Connect the harness
 
-| Component | Minimum Version | Install Command | Verified |
-|-----------|-----------------|-----------------|----------|
-| **OS** | Windows 10/11 | — | ✅ |
-| **OpenCode** | v2.0+ | `npm install -g @opencode/opencode@latest` | ✅ |
-| **Node.js** | v20+ | `winget install OpenJS.NodeJS` | ✅ |
-| **Python** | 3.11+ | `winget install Python.Python.3.12` | ✅ |
-| **Git** | 2.40+ | `winget install Git.Git` | ✅ |
-| **Google Chrome** | Stable | `winget install --id Google.Chrome` | ✅ |
-| **Playwright (Python)** | 1.60+ | `python -m pip install --upgrade playwright` | ✅ |
-| **Playwright Chromium** | — | `python -m playwright install chromium` | ✅ |
-| **openpyxl** | 3.1+ | `python -m pip install openpyxl` | ✅ |
+- Open the repository root in the selected harness and confirm it discovers `AGENTS.md` and the
+  generated skill adapters. For the documented baseline, install current VS Code with GitHub
+  Copilot Chat, enable Agent mode and Agent Skills, and open the repo root as the workspace. The
+  workspace browser server is configured in `.vscode/mcp.json`.
+- Confirm the harness has a **visible, single-page browser** and the shell/file capabilities listed
+  in `agent/TOOLS.md`. Background job discovery is `fresh_scan.py` only; do not use the browser for
+  broad searches. If a company has no scanner adapter, it remains unsearched for that run.
+- Configure a user-level mail tool for narrow portal OTP/confirmation/rejection queries. Mail
+  credentials and server settings are not included here. Validate the connection in the harness;
+  without working mail access, OTP/response checks cannot be automated. Never broaden mail queries.
+- Run the offline gates before first use:
 
-> **Note:** The agent automatically verifies and installs missing pieces on first run. See [PREREQUISITES.md](PREREQUISITES.md) for the full baseline table.
+  ```powershell
+  .\.venv\Scripts\python.exe scripts\maintenance\validate_all.py
+  ```
 
----
+  This validates code, adapters, context budgets, and a fixture-only dry run. It does **not** test
+  browser/mail authentication or prove a live application can be submitted.
 
-## MCP Server Configuration
+## Add your own personal data
 
-The agent requires 6 MCP servers. Run these once:
+`data/` is gitignored and intentionally absent from a fresh clone. Do not copy another person's
+profile or credentials. Add your own:
 
-```bash
-# Playwright - visible browser for portal login & application submission
-opencode mcp add playwright -- npx -y @playwright/mcp@latest
+- `data/master/` — master resume and, if available, master cover letter. Onboarding asks for these;
+  the resume is required to proceed.
+- Profile details — work authorization/sponsorship, locations, salary floor, legal name, contact,
+  education, experience, and approved target companies. The `start` onboarding flow stores them in
+  `data/profile/` and asks you to confirm the summary/company list.
+- `data/tracker/applications.xlsx` — created safely on first start by
+  `python scripts/runtime/tracker.py init`; it will not overwrite an existing workbook.
+- `data/vault/` — optional portal credentials and browser profiles. The credential helper always
+  masks reads; if the harness cannot enter a password without exposing it, enter it manually.
 
-# Gmail - read verification links, OTPs, application confirmations
-opencode mcp add gmail -- python -m gmail_mcp
+The first `start` initializes missing session state and performs onboarding when needed. Job files,
+tracker, profile, credentials, and run state remain local. Say `stop` to checkpoint; later `start`
+resumes. Follow the hard rules in [AGENTS.md](AGENTS.md), especially the two-pass review and manual
+handling of visible CAPTCHA challenges.
 
-# Filesystem - file access within workspace
-opencode mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem "F:\Agentic WorkFlows\job-agent"
+## Browser and run policy
 
-# GitHub - version control / repo operations
-opencode mcp add github -- npx -y @modelcontextprotocol/server-github
-
-# Context7 - up-to-date library/framework documentation
-opencode mcp add context7 -- npx -y @context7/mcp-server
-
-# Sequential Thinking - structured multi-step reasoning
-opencode mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
-```
-
-Verify all are connected:
-```bash
-opencode mcp list
-```
-
----
-
-## First Run — Onboarding
-
-1. **Open the project in OpenCode:**
-   ```bash
-   opencode .
-   ```
-
-2. **Say `start`** in the chat.
-
-3. The agent will walk you through **onboarding** (skill: `onboarding`):
-   - Personal details (name, email, phone, location, LinkedIn, portfolio)
-   - Work authorization (citizenship, visa status, sponsorship needs)
-   - Target roles, locations, salary floor
-   - Master resume & cover letter → place in `data/master/`
-   - Job email (Gmail MCP must be authenticated)
-   - One shared portal password → stored in `data/vault/credentials.txt`
-   - Target company list (skill: `company-research`)
-
-4. **Approve the company list** and the **first application**.
-
-5. The agent then runs the autonomous loop: **search → tailor → login → apply → log**.
-
----
-
-## Directory Layout (What Gets Committed vs. Ignored)
-
-```
-job-agent/
-├── .gitignore          # Ignores all personal/generated data
-├── LICENSE             # MIT License
-├── README.md           # Project overview
-├── SETUP.md            # This file
-├── PREREQUISITES.md    # Verified tool versions
-├── AGENTS.md           # Core rules & control flow
-├── opencode.jsonc      # Skill registration
-├── skills/             # One folder per task (SKILL.md + scripts)
-├── templates/          # resume.html, cover-letter.html (ATS-friendly)
-└── data/               # ALL PERSONAL + GENERATED DATA (gitignored)
-    ├── applications/   # Per-job folders (resume, cover letter, JD, screenshot)
-    ├── master/         # Your master resume.docx + master_resume.pdf
-    ├── profile/        # profile.json, companies.md, answers-bank.json, prior-applications.md
-    ├── state/          # state.json, queue.md, cooling.md, candidates.json, burst.json
-    ├── tracker/        # applications.xlsx
-    └── vault/          # credentials.txt (portal password)
-```
-
-**Never commit the `data/` folder.** It contains your PII, credentials, and application history.
-
----
-
-## Required User Files (One-Time Setup)
-
-Place these in `data/master/` before first run:
-
-| File | Purpose |
-|------|---------|
-| `master resume.docx` | Your master resume (source for tailoring) |
-| `master_resume.pdf`  | PDF version (used for match scoring) |
-
-The agent will create `data/profile/profile.json` and `data/profile/answers-bank.json` during onboarding.
-
----
-
-## Gmail Authentication
-
-The Gmail MCP server must be authenticated to your **existing job email**.
-
-1. Run `opencode mcp list` → confirm `gmail` shows "connected"
-2. If not, the server will prompt for OAuth on first use
-3. Verify with a harmless search:
-   ```
-   Search my job email for "workday" from the last 7 days
-   ```
-
-The agent **only** reads:
-- Verification links & OTPs from career portals
-- Application confirmations/rejections from portals in use
-- Narrow queries: sender domain + recent timestamp
-
----
-
-## Running the Agent
-
-| Command | Effect |
-|---------|--------|
-| `start` | Load state, begin search → tailor → login → apply → log loop |
-| `stop` | Finish/abort current form, save state, halt (resumes on next `start`) |
-| `I found a job` | Stop permanently, summarize stats, ask to keep setup |
-
-**Session budget:** ~12 applications per session, then auto-stop with report.
-
-**Pause between applications:** 30–90 seconds.
-
-**Progress summary:** Every ~5 applications.
-
----
-
-## How It Works (Architecture)
-
-| Skill | Responsibility |
-|-------|----------------|
-| `onboarding` | Profile, eligibility, answers bank, target companies |
-| `company-research` | Build/expand tiered target company list |
-| `job-search` | Search career portals, filter freshness/eligibility, queue candidates |
-| `tailoring` | Create ATS-friendly tailored resume + cover letter from master + JD |
-| `portal-login` | Create/log in to career portal accounts, handle OTPs, reuse sessions |
-| `application-fill` | Fill & submit forms, handle CAPTCHAs, 2-pass review before submit |
-| `tracker` | Excel tracker, Gmail response monitoring, summary reports |
-| `session-control` | Start/stop/resume, state persistence |
-
-**Core rules (from AGENTS.md):**
-- Company career portals only (Workday, Greenhouse, Lever, iCIMS, Taleo, SmartRecruiters, company sites)
-- Automotive industry first filter (OEMs, Tier-1/2, AV on-road)
-- Tester roles only (validation, verification, integration, HIL/SIL, test automation, reliability)
-- Never invent facts on resume/cover letter/application
-- Never submit if legal/eligibility answer unknown
-- 2-pass review before every submit (truth/eligibility → completeness/accuracy)
-
----
-
-## Customizing for Yourself
-
-Since this agent is designed to be **shared** (user-agnostic):
-
-1. **Fork this repo** to your GitHub account
-2. **Clone your fork** locally
-3. **Run setup** (above) — your personal data stays in `data/` (gitignored)
-4. **Push only the code** — never `data/`
-
-```bash
-git add .gitignore LICENSE README.md SETUP.md PREREQUISITES.md AGENTS.md opencode.jsonc skills/ templates/
-git commit -m "Initial commit: Job Agent"
-git push origin main
-```
-
----
-
-## Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| `opencode mcp list` shows disconnected | Re-run MCP add commands; check Node/Python paths |
-| Playwright Chromium not found | `python -m playwright install chromium` |
-| Gmail OAuth fails | Ensure Gmail API enabled in Google Cloud Console; check scopes |
-| Portals block with CAPTCHA | Agent handles automatically; if stuck, it pauses for you |
-| Resume PDF generation fails | Ensure `master_resume.pdf` exists in `data/master/` |
-| Match score low | Agent retries tailoring up to 3 passes; check `skills/tailoring/scripts/match_score.py` |
-
----
-
-## Contributing
-
-This is a personal automation tool shared for learning. PRs welcome for:
-- Bug fixes in skills/scripts
-- New portal handlers (Workday, Greenhouse, etc.)
-- Documentation improvements
-- Cross-platform support (macOS/Linux)
-
----
-
-## License
-
-MIT License — see [LICENSE](LICENSE).
-
----
-
-## Support
-
-- OpenCode docs: https://opencode.ai/v2/docs
-- Issues: GitHub Issues on your fork
-- The agent logs everything to the tracker and console — check there first
+Use background scanning only to find specific candidates. Open the visible browser for that
+candidate's application attempt, inspect the official full JD, then continue to fill only if the role
+is eligible. Cookie banners must be dismissed before interacting. Never bypass CAPTCHA; if it cannot
+be solved, record `Manual Application Submission Needed` and continue to the next role. See
+[`scripts/maintenance/MAINTAIN.md`](scripts/maintenance/MAINTAIN.md) for changing the agent safely.

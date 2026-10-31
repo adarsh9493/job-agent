@@ -1,7 +1,19 @@
 {
-  // OpenCode V2 project configuration.
-  // Registers the project's skills so OpenCode discovers skills/<id>/SKILL.md.
-  // See https://opencode.ai/v2/docs/skills and https://opencode.ai/v2/docs/config
   "$schema": "https://opencode.ai/config.json",
-  "skills": ["./skills"]
+  "$comment": "GENERATED - do not edit. Source: agent/mcp.json + agent/skills/",
+  "skills": [
+    "./agent/skills"
+  ],
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "@playwright/mcp@0.0.84"
+        ]
+      }
+    }
+  }
 }

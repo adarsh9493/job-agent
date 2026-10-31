@@ -17,6 +17,7 @@ data/vault/
 !README.md
 !SETUP.md
 !LICENSE
+!requirements.txt
 
 # Python cache
 __pycache__/
@@ -35,6 +36,8 @@ ENV/
 
 # IDE and editor
 .vscode/
+!.vscode/
+!.vscode/mcp.json
 .idea/
 *.swp
 *.swo
@@ -54,9 +57,9 @@ logs/
 temp/
 tmp/
 
-# Test and debug scripts (local development)
-test_*.py
-fix_*.py
+# Test and debug scripts (local development, repo root only)
+/test_*.py
+/fix_*.py
 check_*.py
 fetch_*.py
 search_*.py
