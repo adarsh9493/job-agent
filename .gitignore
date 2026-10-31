@@ -17,6 +17,7 @@ data/vault/
 !README.md
 !SETUP.md
 !LICENSE
+!requirements.txt
 
 # Python cache
 __pycache__/
@@ -56,10 +57,9 @@ logs/
 temp/
 tmp/
 
-# Test and debug scripts (local development)
-test_*.py
-!tests/test_workflow_contract.py
-fix_*.py
+# Test and debug scripts (local development, repo root only)
+/test_*.py
+/fix_*.py
 check_*.py
 fetch_*.py
 search_*.py

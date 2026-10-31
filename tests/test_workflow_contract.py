@@ -156,14 +156,14 @@ class AdapterTests(unittest.TestCase):
 
 class PolicyTests(unittest.TestCase):
     def test_application_submission_policy_matches_user_directives(self):
-        agent_rules = read(ROOT / "AGENTS.md").lower()
-        application_skill = read(
-            ROOT / "agent" / "skills" / "application-fill" / "SKILL.md"
-        ).lower()
+        agent_rules = " ".join(read(ROOT / "AGENTS.md").lower().split())
+        application_skill = " ".join(
+            read(ROOT / "agent" / "skills" / "application-fill" / "SKILL.md").lower().split()
+        )
 
         self.assertIn("the agent submits **on its own**", agent_rules)
         self.assertIn("apply when the posting is silent", agent_rules)
-        self.assertIn("does not block submission", application_skill)
+        self.assertIn("not by itself a reason to stop or withhold submission", application_skill)
 
     def test_browser_workflow_requires_one_page_and_explicit_close_handling(self):
         agent_rules = " ".join(read(ROOT / "AGENTS.md").lower().split())
@@ -179,6 +179,22 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("do not claim they were closed", agent_rules)
         self.assertIn("close the remaining browser page", session_skill)
         self.assertIn("navigate the same page", application_skill)
+
+    def test_canonical_files_never_instruct_reading_large_data_files_whole(self):
+        forbidden = (
+            "read `data/state/state.json`",
+            "read `data/profile/answers-bank.json`",
+            "read `data/tracker/applications.xlsx`",
+            "read `data/profile/companies.md`",
+            "read `data/state/queue.md`",
+            "load the tracker",
+        )
+        for path in canonical_files():
+            text = " ".join(read(path).lower().split())
+            for phrase in forbidden:
+                self.assertNotIn(
+                    phrase, text, f"{path.relative_to(ROOT)} says to {phrase}"
+                )
 
     def test_session_control_documents_restart_safe_start_and_stop_checkpoints(self):
         contents = read(ROOT / "agent" / "skills" / "session-control" / "SKILL.md").lower()
@@ -346,26 +362,37 @@ class TailoringTests(unittest.TestCase):
         self.assertFalse(valid)
         self.assertTrue(any("template tokens" in error for error in errors))
 
-    def test_missing_local_tailoring_data_is_safe_for_fresh_setups(self):
+    def test_missing_local_tailoring_base_is_safe_for_fresh_setups(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.object(gen, "TAILORING_DATA_PATH", Path(temp_dir) / "missing.json"):
+            with patch.object(gen, "BASE_PATH", Path(temp_dir) / "missing.json"):
                 self.assertEqual(
-                    gen.load_tailoring_data(),
-                    {"PROJECTS": {}, "EXPERIENCE": "", "EDUCATION": "", "JOBS": {}},
+                    gen.load_tailoring_base(Path(temp_dir) / "missing.json"),
+                    {"PROJECTS": {}, "EXPERIENCE": "", "EDUCATION": ""},
                 )
 
-    def test_invalid_local_tailoring_data_fails_explicitly(self):
+    def test_invalid_local_tailoring_base_fails_explicitly(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            data_path = Path(temp_dir) / "tailoring-content.json"
+            data_path = Path(temp_dir) / "tailoring-base.json"
             data_path.write_text(json.dumps({"PROJECTS": []}), encoding="utf-8")
-            with patch.object(gen, "TAILORING_DATA_PATH", data_path):
-                with self.assertRaisesRegex(ValueError, "Missing"):
-                    gen.load_tailoring_data()
+            with self.assertRaisesRegex(ValueError, "Missing"):
+                gen.load_tailoring_base(data_path)
+
+    def test_job_config_loads_from_the_job_folder_only(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            folder = Path(temp_dir) / "Lucid_ADAS_2026-10-31"
+            folder.mkdir()
+            config = {"key": "lucid_adas", "folder": folder.name, "summary": "real content"}
+            (folder / "tailoring.json").write_text(json.dumps(config), encoding="utf-8")
+
+            loaded = gen.load_job_config(folder)
+            self.assertEqual(loaded["key"], "lucid_adas")
+            self.assertEqual(loaded["summary"], "real content")
 
     def test_build_all_explains_when_no_local_configs_exist(self):
         stderr = io.StringIO()
         build_script = ROOT / "scripts" / "tailoring" / "build_all.py"
-        with patch.object(gen, "JOBS", {}), patch.object(sys, "argv", [str(build_script)]):
+        with patch.object(gen, "job_keys", return_value=[]), \
+                patch.object(sys, "argv", [str(build_script)]):
             with contextlib.redirect_stderr(stderr):
                 with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(build_script), run_name="__main__")

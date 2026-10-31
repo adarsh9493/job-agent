@@ -36,6 +36,7 @@ from datetime import date, datetime, timedelta
 PROJ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TRACKER = os.path.join(PROJ, "data", "tracker", "applications.xlsx")
 COMPANIES = os.path.join(PROJ, "data", "profile", "companies.md")
+COMPANIES_JSON = os.path.join(PROJ, "data", "profile", "companies.json")
 STATE = os.path.join(PROJ, "data", "state", "state.json")
 # statuses that represent a real application (used to derive the rotating cursor)
 APPLIED_STATUS = (
@@ -178,8 +179,21 @@ def applied_keys() -> set[str]:
     return {key(r["company"]) for r in _rows() if r["company"]}
 
 
+def _names_from_json(path: str) -> list[str]:
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            rows = json.load(fh).get("companies") or []
+    except (OSError, ValueError, TypeError):
+        return []
+    return [str(row["name"]) for row in rows if isinstance(row, dict) and row.get("name")]
+
+
 def company_list(path: str = COMPANIES) -> list[str]:
-    """Ordered target companies parsed from the numbered tier tables of companies.md."""
+    """Ordered target companies: companies.json when present, else the companies.md tables."""
+    if path == COMPANIES and os.path.exists(COMPANIES_JSON):
+        names = _names_from_json(COMPANIES_JSON)
+        if names:
+            return names
     names: list[str] = []
     if not os.path.exists(path):
         return names
@@ -324,8 +338,25 @@ def main() -> int:
     ap.add_argument("--today")
     ap.add_argument("--cursor", help="start the sweep at this company (name or tracker key)")
     ap.add_argument("--companies-file", default=COMPANIES)
+    ap.add_argument("--next", action="store_true",
+                    help="print only the next company to work (JSON)")
     args = ap.parse_args()
     today = datetime.strptime(args.today, "%Y-%m-%d").date() if args.today else date.today()
+
+    if args.next:
+        entries = plan(today, args.companies_file, args.cursor)
+        nxt = next((entry for entry in entries if not entry.get("interview_blocked")), None)
+        if nxt is None:
+            print(json.dumps({"next": None, "reason": "every company is interview-blocked"},
+                             separators=(",", ":")))
+            return 0
+        print(json.dumps({
+            "next": nxt["company"],
+            "last": nxt["last"].isoformat() if nxt["last"] else None,
+            "days": nxt["days"],
+            "index": nxt["idx"],
+        }, separators=(",", ":")))
+        return 0
 
     if args.company:
         s = status(args.company, today)

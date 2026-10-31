@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tailoring generator: builds a resume + cover letter HTML from the master resume content
 (data/master/master resume.docx). Only real, master-derived content is used; nothing invented.
-Usage:  python gen.py <job_key>
+Usage:  python gen.py <job folder | job key>
 """
 import html
 import json
@@ -79,42 +79,82 @@ COV_CSS = """
 """
 
 # ---------------------------------------------------------------- shared content (all master-derived)
-TAILORING_DATA_PATH = PROJECT_ROOT / "data" / "profile" / "tailoring-content.json"
+BASE_PATH = PROJECT_ROOT / "data" / "profile" / "tailoring-base.json"
+APPS_DIR = PROJECT_ROOT / "data" / "applications"
+REQUIRED_BASE = ("PROJECTS", "EXPERIENCE", "EDUCATION")
 
 
-def load_tailoring_data():
-    if not TAILORING_DATA_PATH.is_file():
-        return {"PROJECTS": {}, "EXPERIENCE": "", "EDUCATION": "", "JOBS": {}}
-    with TAILORING_DATA_PATH.open(encoding="utf-8-sig") as data_file:
+def load_tailoring_base(path=BASE_PATH):
+    """Shared content only (~10 KB). Job-specific configuration lives in the job folder."""
+    if not Path(path).is_file():
+        return {"PROJECTS": {}, "EXPERIENCE": "", "EDUCATION": ""}
+    with open(path, encoding="utf-8-sig") as data_file:
         data = json.load(data_file)
     if not isinstance(data, dict):
-        raise ValueError(f"Invalid tailoring data in {TAILORING_DATA_PATH}")
-    required = ("PROJECTS", "EXPERIENCE", "EDUCATION", "JOBS")
-    missing = [key for key in required if key not in data]
+        raise ValueError(f"Invalid tailoring base in {path}")
+    missing = [key for key in REQUIRED_BASE if key not in data]
     if missing:
-        raise ValueError(
-            f"Missing {', '.join(missing)} in tailoring data at {TAILORING_DATA_PATH}"
-        )
-    expected_types = {
-        "PROJECTS": dict,
-        "EXPERIENCE": str,
-        "EDUCATION": str,
-        "JOBS": dict,
-    }
-    invalid = [key for key, expected in expected_types.items()
-               if not isinstance(data[key], expected)]
+        raise ValueError(f"Missing {', '.join(missing)} in tailoring base at {path}")
+    expected = {"PROJECTS": dict, "EXPERIENCE": str, "EDUCATION": str}
+    invalid = [key for key, kind in expected.items() if not isinstance(data[key], kind)]
     if invalid:
-        raise ValueError(
-            f"Invalid data types for {', '.join(invalid)} in {TAILORING_DATA_PATH}"
-        )
-    return {key: data[key] for key in required}
+        raise ValueError(f"Invalid data types for {', '.join(invalid)} in {path}")
+    return {key: data[key] for key in REQUIRED_BASE}
 
 
-_TAILORING_DATA = load_tailoring_data()
-PROJECTS = _TAILORING_DATA["PROJECTS"]
-EXPERIENCE = _TAILORING_DATA["EXPERIENCE"]
-EDUCATION = _TAILORING_DATA["EDUCATION"]
-JOBS = _TAILORING_DATA["JOBS"]
+_BASE = load_tailoring_base()
+PROJECTS = _BASE["PROJECTS"]
+EXPERIENCE = _BASE["EXPERIENCE"]
+EDUCATION = _BASE["EDUCATION"]
+
+
+def job_config_paths():
+    """Every per-job tailoring.json under data/applications (current and history)."""
+    return sorted(APPS_DIR.rglob("tailoring.json")) if APPS_DIR.is_dir() else []
+
+
+def load_job_config(target):
+    """Load one job config from a job folder, a tailoring.json path, or a job key."""
+    path = Path(target)
+    config_path = None
+    if path.is_file() and path.name == "tailoring.json":
+        config_path = path
+    elif path.is_dir():
+        candidate = path / "tailoring.json"
+        config_path = candidate if candidate.is_file() else None
+    else:
+        for candidate in job_config_paths():
+            if candidate.parent.name == target:
+                config_path = candidate
+                break
+            try:
+                key = json.loads(candidate.read_text(encoding="utf-8-sig")).get("key")
+            except (OSError, ValueError):
+                key = None
+            if key == target:
+                config_path = candidate
+                break
+    if config_path is None:
+        return None
+    config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    if not isinstance(config, dict):
+        raise ValueError(f"Invalid job configuration at {config_path}")
+    config.setdefault("key", config_path.parent.name)
+    config.setdefault("folder", config_path.parent.name)
+    return config
+
+
+def job_keys(current_only=True):
+    keys = []
+    for config_path in job_config_paths():
+        if current_only and "current" not in config_path.parts:
+            continue
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            continue
+        keys.append(config.get("key") or config_path.parent.name)
+    return keys
 
 
 
@@ -201,13 +241,13 @@ def render_cover(cfg):
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: python gen.py <local-job-config>", file=sys.stderr)
+        print("Usage: python gen.py <job folder | job key>", file=sys.stderr)
         return 2
-    key = sys.argv[1]
-    if key not in JOBS:
-        print(f"No local tailoring configuration for {key}", file=sys.stderr)
+    cfg = load_job_config(sys.argv[1])
+    if cfg is None:
+        print(f"No tailoring.json found for {sys.argv[1]}", file=sys.stderr)
         return 2
-    cfg = JOBS[key]
+    key = cfg["key"]
     os.makedirs(TEMP, exist_ok=True)
     rp = os.path.join(TEMP, f"resume_{key}.html")
     cp = os.path.join(TEMP, f"cover_{key}.html")

@@ -12,11 +12,16 @@ current policy in `AGENTS.md`; it does not define a separate search policy.
 ## Inputs
 
 - `data/profile/companies.md` — approved companies, career URLs, ATS types, and industry evidence.
+  Query it with `python scripts/runtime/companies.py show "<name>"` (cached verdict + stale flag).
 - `data/profile/profile.json` — work authorization, locations, exclusions, and salary floor.
-- `data/tracker/applications.xlsx` — load at sweep start and refresh after each application or
-  response update before continuing, to prevent duplicates.
+- `data/tracker/applications.xlsx` — check duplicates with
+  `python scripts/runtime/tracker.py has-applied`; never read the sheet whole.
 - `data/profile/prior-applications.md` — pre-existing applications; compare company + title + location.
-- `data/state/state.json` — current queue and rotating sweep cursor.
+- `data/state/state.json` — current queue and rotating sweep cursor; read it through
+  `python scripts/runtime/state.py` / `sweep.py --next`.
+
+**Full filter definitions (automotive-first, role function, strict ADAS/AD lock, freshness, sweep):
+`reference/filters.md`.** Apply them exactly; this skill does not redefine them.
 
 ## Workflow
 

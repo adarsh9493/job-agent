@@ -13,9 +13,10 @@ machine.
 1. If `data/state/state.json` does not exist, run
    `python scripts/runtime/checkpoint.py init`. Otherwise run
    `python scripts/runtime/checkpoint.py validate`; do not proceed with malformed state.
-2. Read the tracker, pending legal blockers, approved company list, application-folder evidence, and
-   rotating sweep cursor. Complete onboarding when needed. Reconcile conflicts and initialize both
-   cursor fields from the approved list before setting a non-empty cursor. Then run
+2. Read the tracker summary (`python scripts/runtime/tracker.py summary`), pending legal blockers,
+   approved company list, application-folder evidence, and rotating sweep cursor. Complete
+   onboarding when needed. Reconcile conflicts and initialize both cursor fields from the approved
+   list before setting a non-empty cursor. Then run
    `python scripts/runtime/checkpoint.py set-mode running`.
 3. Before browser work, keep to one visible browser page; reuse it sequentially and close any
    finished page when the available browser controls support closure (`AGENTS.md` rule 12).
@@ -48,3 +49,11 @@ closed. A later `start` resumes from that verified checkpoint.
 
 When the user says **“I found a job”**, stop permanently, summarize application statistics, and ask
 whether to keep the setup.
+
+## Cadence
+
+- Apply sequentially, never in parallel. No artificial delay between applications; respect portal
+  rate limits and wait when the site requires it.
+- Give a brief progress summary about every 5 applications (applied, skipped, blocked, queued).
+- Keep one browser page for the whole run and navigate it between companies and jobs
+  (`AGENTS.md` rule 12).

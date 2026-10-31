@@ -77,6 +77,11 @@ Keep a **list data-validation dropdown** on `J2:J1000` restricted to these value
 ## Rules
 
 - Never add a separate response or follow-up column; fold responses into `Status`.
+- **Source of truth for "applied" is the job folder confirmation screenshot**
+  (`confirmation_screenshot.png`), not the row count. Reconcile the sheet against
+  `data/applications/` at start and stop.
+- Read and write the sheet through `python scripts/runtime/tracker.py`
+  (`has-applied`, `add`, `update`, `summary`) — never load the whole workbook into the conversation.
 - **Follow-up due** = `Date Applied` + 7 days while `Status` = `Applied` (compute it, don't store it).
 - Keep the `Notes` cell self-contained: wrap text, top-align, no fixed row height (auto-fit).
 - Store the final resume-PDF match score in column L (`Match %`) after tailoring; never substitute

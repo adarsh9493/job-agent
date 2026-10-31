@@ -1,3 +1,12 @@
+"""Render and verify every job folder that has a `tailoring.json`.
+
+    python scripts/tailoring/build_all.py                  # every job in data/applications/current
+    python scripts/tailoring/build_all.py <job key> ...    # specific jobs (current or history)
+
+Each job's configuration is read from `<job folder>/tailoring.json`; the shared master-derived
+content comes from `data/profile/tailoring-base.json`. Nothing is invented: `gen.py` renders only
+the content in those two files.
+"""
 import os
 import subprocess
 import sys
@@ -5,7 +14,7 @@ from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import gen  # noqa: E402  (sibling module: skills/tailoring/scripts/gen.py)
+import gen  # noqa: E402  (sibling module)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APPS = PROJECT_ROOT / "data" / "applications" / "current"
@@ -13,8 +22,8 @@ APPS = PROJECT_ROOT / "data" / "applications" / "current"
 RENDER = os.path.join(HERE, "render_pdf.py")
 VERIFY = os.path.join(HERE, "verify_pdf.py")
 
-keys = sys.argv[1:] or list(gen.JOBS.keys())
-if not keys:
+targets = sys.argv[1:] or gen.job_keys(current_only=True)
+if not targets:
     print(
         "No local tailoring configurations are available. Use the tailoring skill "
         "to build this job from the user's profile and master resume.",
@@ -22,17 +31,22 @@ if not keys:
     )
     sys.exit(2)
 
-for key in keys:
-    if key not in gen.JOBS:
-        print(f"Unknown job config: {key}", file=sys.stderr)
+configs = []
+for target in targets:
+    config = gen.load_job_config(target)
+    if config is None:
+        print(f"Unknown job config: {target}", file=sys.stderr)
         sys.exit(2)
+    configs.append(config)
 
-    cfg = gen.JOBS[key]
-    name_parts = gen.profile_identity()["legal_name"].split()
-    if len(name_parts) < 2:
-        print("Profile legal name must include first and last name", file=sys.stderr)
-        sys.exit(2)
-    file_stem = f"{name_parts[0]}_{name_parts[-1]}"
+name_parts = gen.profile_identity()["legal_name"].split()
+if len(name_parts) < 2:
+    print("Profile legal name must include first and last name", file=sys.stderr)
+    sys.exit(2)
+file_stem = f"{name_parts[0]}_{name_parts[-1]}"
+
+for cfg in configs:
+    key = cfg["key"]
     folder = APPS / cfg["folder"]
     os.makedirs(folder, exist_ok=True)
     rh = Path(gen.TEMP) / f"resume_{key}.html"
