@@ -155,6 +155,22 @@ class AdapterTests(unittest.TestCase):
 
 
 class PolicyTests(unittest.TestCase):
+    def test_job_discovery_uses_scanner_and_browser_only_for_specific_application_attempts(self):
+        rules = " ".join(read(ROOT / "AGENTS.md").lower().split())
+        search_skill = " ".join(read(ROOT / "agent" / "skills" / "job-search" / "SKILL.md")
+                                  .lower().split())
+        self.assertIn("discover in the background with `fresh_scan.py` only", rules)
+        self.assertIn("never browse for broad job search", rules)
+        self.assertIn("unsupported companies remain unsearched for this run", search_skill)
+        self.assertNotIn("search its official career portal directly", search_skill)
+
+    def test_credential_reads_never_have_a_reveal_option(self):
+        source = read(ROOT / "scripts" / "runtime" / "creds.py")
+        portal = read(ROOT / "agent" / "skills" / "portal-login" / "SKILL.md").lower()
+        self.assertNotIn('getter.add_argument("--reveal"', source)
+        self.assertIn("always masks the password", portal)
+        self.assertIn("ask the user to enter it manually", portal)
+
     def test_application_submission_policy_matches_user_directives(self):
         agent_rules = " ".join(read(ROOT / "AGENTS.md").lower().split())
         application_skill = " ".join(
@@ -174,9 +190,9 @@ class PolicyTests(unittest.TestCase):
             ROOT / "agent" / "skills" / "application-fill" / "SKILL.md"
         ).lower()
 
-        self.assertIn("use one browser page at a time", agent_rules)
-        self.assertIn("do not open parallel tabs/pages", agent_rules)
-        self.assertIn("do not claim they were closed", agent_rules)
+        self.assertIn("use one visible browser page only", agent_rules)
+        self.assertIn("never open parallel pages", agent_rules)
+        self.assertIn("never claim closure", agent_rules)
         self.assertIn("close the remaining browser page", session_skill)
         self.assertIn("navigate the same page", application_skill)
 

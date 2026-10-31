@@ -31,9 +31,11 @@ current policy in `AGENTS.md`; it does not define a separate search policy.
 2. Walk the approved company list in order from the saved rotating cursor. Read the company’s own
    business sources and classify mixed-business roles by business line before searching. Record the
    verdict and evidence in `companies.md`.
-3. Search company career portals only. Search ADAS / autonomous driving / on-road autonomy
-   validation, test, verification, HIL/SIL/MIL, simulation, sensor validation, driving scenarios,
-   perception, planning, and systems integration.
+3. Discover roles in the background with `scripts/scan/fresh_scan.py` only. Do not use a browser for
+   broad job search. Open the visible browser only for a specific scanner candidate as the start of
+   an application attempt; dismiss consent first, inspect its complete official-portal JD, and
+   continue filling only if it is in scope. If the company has no scanner adapter or scanning fails,
+   record it as unsearched and continue; do not substitute another search channel.
 4. Inspect the complete job description. The primary validation target must be ADAS/AD/autonomy;
    a relevant title or a general automotive employer is not enough. Reject unrelated roles including
    EV/powertrain, infotainment, production quality, generic SDET/QA, and non-automotive robotics.
@@ -44,10 +46,9 @@ current policy in `AGENTS.md`; it does not define a separate search policy.
    continue to the next role.
 7. Deduplicate against the tracker, prior applications, and current/history folders using company,
    job ID, URL, and title + location. Verify possible duplicates before queueing.
-8. Use `scripts/scan/fresh_scan.py` as the only automated posting scanner, and only to
-   discover candidates. A scanner hit is not an industry, ADAS/AD, eligibility, or duplicate
-   approval; verify those from source pages. If a company has no scanner adapter or scanning fails,
-   search its official career portal directly; no scan results do not mean no jobs exist.
+8. A scanner hit is not an industry, ADAS/AD, eligibility, or duplicate approval. Verify those from
+   the official job page only after opening a specific candidate as an application attempt. No scan
+   results do not mean no jobs exist; unsupported companies remain unsearched for this run.
 9. Queue at most one role per company in each round, in company-list order. Choose the freshest
    eligible role, then the best match. Continue round-robin from the next company after each round.
    There is no agent-imposed cooling period or queue cap; obey only company-stated application limits

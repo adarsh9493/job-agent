@@ -105,3 +105,18 @@ payload: **56,947 bytes** (~14.2k tokens) across `AGENTS.md` + 8 `SKILL.md` file
 - Tests: **78/78 pass**; adapter check and `validate_all.py` green. Context before -> after:
   session start **6,502 -> 6,502 B**, skill text **29,607 -> 29,701 B**, worst phase **10,109 B**;
   all budgets remain clear.
+
+### Post-run hardening (2026-10-31)
+
+- The first RUN exposed that helper-process PIDs made the run lock appear stale as soon as each CLI
+  exited. Replaced it with a cross-process serialized, 12-hour lease refreshed by checkpoints; added
+  a two-process acquisition test. Stop marks the lease released instead of deleting the lock file.
+- Recorded the user's hard rule: background discovery uses `fresh_scan.py` only; open the visible
+  browser only for a specific candidate as an application attempt. Unsupported boards are recorded
+  as unsearched, not browsed or searched through another channel.
+- Removed `creds.py --reveal`; reads are always masked. The portal-login instructions now require
+  manual entry if safe password transfer is unavailable.
+- Tests: **82/82 pass**; adapters and validation gates green. No live application was submitted in
+  the first run; the only tracker additions were reviewed skips, and personal `data/` is unchanged
+  by this maintenance phase. Context before -> after: session start **6,502 -> 6,486 B**, skill
+  text **29,701 -> 29,864 B**, worst phase **10,109 -> 10,093 B**; no budget is exceeded.

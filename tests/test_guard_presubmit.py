@@ -198,9 +198,10 @@ class CredentialTests(unittest.TestCase):
         self.assertEqual(result["password"], "********")
         self.assertNotIn("tenant-secret-fixture", json.dumps(creds._list()))
 
-    def test_reveal_and_shared_fallback(self):
-        revealed = creds._get("example", reveal=True)
-        self.assertEqual(revealed["password"], "tenant-secret-fixture")
+    def test_get_always_masks_and_shared_fallback(self):
+        result = creds._get("example")
+        self.assertEqual(result["password"], "********")
+        self.assertTrue(result["has_password"])
         self.vault.write_text("[SHARED]\npassword = shared-only\nusername = shared@test\n",
                               encoding="utf-8")
         fallback = creds._get("unknown")
@@ -215,9 +216,18 @@ class CredentialTests(unittest.TestCase):
         parsed = json.loads(out.getvalue())
         self.assertEqual(code, 0)
         self.assertNotIn("password", parsed)
-        self.assertEqual(creds._get("newtenant", reveal=True)["username"], "new@example.test")
-        self.assertEqual(len(creds._get("newtenant", reveal=True)["password"]), 24)
-        self.assertNotIn(creds._get("newtenant", reveal=True)["password"], out.getvalue())
+        result = creds._get("newtenant")
+        self.assertEqual(result["username"], "new@example.test")
+        self.assertEqual(result["password"], "********")
+        shared, _ = creds._load()
+        self.assertEqual(len(shared["workday_newtenant_password"]), 24)
+        self.assertNotIn(shared["workday_newtenant_password"], out.getvalue())
+
+    def test_cli_has_no_password_reveal_option(self):
+        err = io.StringIO()
+        with patch("sys.stderr", err), self.assertRaises(SystemExit):
+            creds.main(["get", "--domain", "example", "--reveal"])
+        self.assertIn("unrecognized arguments", err.getvalue())
 
     def test_set_reads_password_from_stdin_and_never_echoes_it(self):
         out = io.StringIO()

@@ -6,9 +6,11 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -111,6 +113,28 @@ class BriefingTests(unittest.TestCase):
 
 
 class RunLockTests(unittest.TestCase):
+    def test_lease_survives_cli_process_exit_and_allows_only_one_acquirer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock = Path(temp_dir) / "run.lock"
+            snippet = (
+                "import json,sys; sys.path.insert(0,sys.argv[1]); import checkpoint; "
+                "print(json.dumps(checkpoint.acquire_lock(sys.argv[2])))"
+            )
+            processes = [
+                subprocess.Popen([sys.executable, "-c", snippet,
+                                  str(ROOT / "scripts" / "runtime"), str(lock)],
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for _ in range(2)
+            ]
+            results = []
+            for process in processes:
+                stdout, stderr = process.communicate(timeout=10)
+                self.assertEqual(process.returncode, 0, stderr)
+                results.append(json.loads(stdout))
+
+            self.assertEqual(sum(result.get("ok", False) for result in results), 1)
+            self.assertTrue(checkpoint.lock_status(lock)["held"])
+
     def test_lock_is_single_run_and_replaced_when_stale(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             lock = Path(temp_dir) / "run.lock"
@@ -123,15 +147,17 @@ class RunLockTests(unittest.TestCase):
             self.assertTrue(again["ok"])
             self.assertTrue(again["reused"])
 
-            lock.write_text(json.dumps({"pid": 12345, "since": "2026-10-31T08:00:00-04:00"}),
+            lock.write_text(json.dumps({"pid": 12345, "since":
+                                        datetime.now().astimezone().isoformat()}),
                             encoding="utf-8")
-            with patch.object(checkpoint, "_pid_alive", return_value=True):
-                foreign = checkpoint.acquire_lock(lock)
+            self.assertTrue(checkpoint.lock_status(lock)["held"])
+            foreign = checkpoint.acquire_lock(lock)
             self.assertFalse(foreign["ok"])
             self.assertIn("another run", foreign["reason"])
 
             self.assertTrue(checkpoint.release_lock(lock)["released"])
             self.assertFalse(checkpoint.lock_status(lock)["held"])
+            self.assertTrue(lock.is_file())
 
             lock.write_text(json.dumps({"pid": 999999999, "since": "2020-01-01T00:00:00+00:00"}),
                             encoding="utf-8")
@@ -166,7 +192,7 @@ class IdempotentCheckpointTests(unittest.TestCase):
             self.assertEqual(events.count(log), 1)
 
             stopped = checkpoint.set_mode(path, "stopped")
-            self.assertFalse(lock.is_file())
+            self.assertFalse(checkpoint.lock_status(lock)["held"])
             stopped_at = stopped["last_stop_at"]
             self.assertEqual(events.count(log), 2)
 

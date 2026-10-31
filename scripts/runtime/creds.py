@@ -3,12 +3,11 @@
 
     python scripts/runtime/creds.py list
     python scripts/runtime/creds.py get --domain generalmotors
-    python scripts/runtime/creds.py get --domain generalmotors --reveal   # fill time only
     printf '%s' "$PW" | python scripts/runtime/creds.py set --key workday_foo_password --password-stdin
     python scripts/runtime/creds.py new --key workday_foo --username adarsh.9493@gmail.com
 
-Secrets are masked unless --reveal is passed. `new` generates a 24-character password,
-stores it, and never prints it.
+Secrets are always masked. `new` generates a 24-character password, stores it, and never prints it.
+There is no command-line option that reveals a password.
 """
 from __future__ import annotations
 
@@ -73,7 +72,7 @@ def _tenants(shared):
     return tenants
 
 
-def _get(domain: str, reveal: bool = False):
+def _get(domain: str):
     shared, portals = _load()
     domain_norm = norm(domain)
     password_shared = shared.get("password")
@@ -83,24 +82,23 @@ def _get(domain: str, reveal: bool = False):
         if tenant and (tenant in domain_norm or domain_norm in tenant):
             email = shared.get(f"workday_{tenant}_email") or username_shared
             password = shared.get(f"workday_{tenant}_password") or password_shared
-            return _result(domain, email, password, f"workday:{tenant}", reveal)
+            return _result(domain, email, password, f"workday:{tenant}")
 
     for portal in portals:
         if domain_norm and (domain_norm in norm(portal["url"])
                             or domain_norm in norm(portal["name"])):
-            return _result(domain, portal["username"], password_shared,
-                           "portal", reveal)
+            return _result(domain, portal["username"], password_shared, "portal")
 
-    return _result(domain, username_shared, password_shared, "shared", reveal)
+    return _result(domain, username_shared, password_shared, "shared")
 
 
-def _result(domain, username, password, source, reveal):
+def _result(domain, username, password, source):
     return {
         "domain": domain,
         "username": username,
-        "password": password if reveal else ("********" if password else None),
+        "password": "********" if password else None,
         "source": source,
-        "revealed": bool(reveal and password),
+        "has_password": bool(password),
     }
 
 
@@ -179,8 +177,6 @@ def main(argv=None) -> int:
 
     getter = sub.add_parser("get", help="get a credential for a domain")
     getter.add_argument("--domain", required=True)
-    getter.add_argument("--reveal", action="store_true",
-                        help="print the password (fill time only)")
 
     setter = sub.add_parser("set", help="set one key from stdin")
     setter.add_argument("--key", required=True)
@@ -197,7 +193,7 @@ def main(argv=None) -> int:
         return 0
 
     if args.command == "get":
-        emit(_get(args.domain, args.reveal))
+        emit(_get(args.domain))
         return 0
 
     if args.command == "set":

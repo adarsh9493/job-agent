@@ -21,9 +21,11 @@ python scripts/runtime/queue.py view
 
 ## Hard rules (never override)
 
-1. **Company career portals only** (Workday, Greenhouse, Lever, iCIMS, Taleo, SmartRecruiters,
-   company sites). Never LinkedIn / Indeed / Glassdoor. Exception: if a CAPTCHA blocks the portal
-   **and** an Easy Apply exists for the **same** role, ask the user and wait for approval.
+1. **Company portals only** (Workday, Greenhouse, Lever, iCIMS, Taleo, SmartRecruiters, company
+   sites); never LinkedIn / Indeed / Glassdoor. Discover in the background with `fresh_scan.py` only.
+   Open one visible browser only for a specific candidate as an application attempt (full-JD review,
+   then fill); never browse for broad job search. No scanner adapter means unsearched; continue.
+   CAPTCHA + Easy Apply for the same role: ask and wait for approval.
 2. **Mail.** Use the user's existing job email. Only search/read verification links, OTPs, and
    application confirmations/rejections from portals in use; narrow queries (sender domain +
    recent timestamp). Never open, summarize, or quote any other email.
@@ -59,11 +61,9 @@ python scripts/runtime/queue.py view
     the only exception: pause that application, inform the user, log the blocker, continue. Target
     zero input between "start" and "stop"; a brand-new user reaches full autonomy within 5
     applications. Keep the setup user-agnostic (personal data under `data/`).
-12. **Use one browser page at a time.** Reuse one visible page, navigate sequentially; do not open
-    parallel tabs/pages for separate companies, jobs, or duplicate searches. Close a finished page
-    when the tool exposes a close operation and verify it closed; at stop close the remaining page
-    when supported. If the controls expose neither pages nor close, do not claim they were closed;
-    reuse one page, open none, and report it.
+12. **Use one visible browser page only.** Reuse it sequentially; never open parallel pages. Close
+    finished and remaining pages when supported, and verify closure. If controls expose no page/close
+    operation, open none and report that; never claim closure.
 
 ## Skills
 

@@ -20,10 +20,10 @@ description: Use when creating or logging in to career-portal accounts. Handle p
 ## Steps
 
 1. **Check the vault before any password reset.** Use
-   `python scripts/runtime/creds.py get --domain <tenant-or-portal>`; it masks the password by
-   default and applies the portal-specific Workday credential before the shared fallback. Only
-   when entering a password into the visible form, use `--reveal`; do not echo, quote, log, or pass
-   the value as a tool argument.
+   `python scripts/runtime/creds.py get --domain <tenant-or-portal>`; it always masks the password
+   and applies portal-specific Workday credentials before the shared fallback. Never reveal a
+   password in tool output or pass it as a tool argument. If secure password entry is unavailable,
+   ask the user to enter it manually.
 2. **Try the existing login first** using the saved portal-specific or shared credential. Use
    "Forgot password" only if the matching credential is absent, or the portal explicitly rejects
    the attempted password as invalid. A stale application page, signed-out session, timeout, or

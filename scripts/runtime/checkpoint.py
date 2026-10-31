@@ -2,7 +2,7 @@
 """Validate and safely update the persisted application-session checkpoint."""
 
 import argparse
-import ctypes
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -130,81 +130,143 @@ def _sidecar(state_path, name):
     return Path(state_path).parent / name
 
 
-def _pid_alive(pid) -> bool:
-    """True when the process that wrote the lock is still running."""
-    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
-        return False
-    if sys.platform == "win32":
-        process_query_limited_information = 0x1000
-        handle = ctypes.windll.kernel32.OpenProcess(
-            process_query_limited_information, False, pid
-        )
-        if not handle:
-            return False
-        ctypes.windll.kernel32.CloseHandle(handle)
-        return True
+@contextmanager
+def _locked_file(path, create=False):
+    """Serialize lock-file reads/writes across short-lived CLI processes."""
+    path = Path(path)
+    if not create and not path.is_file():
+        yield None
+        return
+    if create:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(path, "a+b")
+    locked = False
     try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            locked = True
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            locked = True
+        yield handle
+    finally:
+        if locked:
+            if os.name == "nt":
+                import msvcrt
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
 
 
-def lock_status(path=None):
-    """Describe the run lock without changing it."""
-    path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
+def _read_lock(handle):
+    if handle is None:
+        return None
+    handle.seek(0)
+    raw = handle.read().strip(b"\x00\r\n")
+    if not raw:
+        return {}
     try:
-        info = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {"held": False}
-    if not isinstance(info, dict):
-        return {"held": False}
-    since = info.get("since")
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _write_lock(handle, info):
+    handle.seek(0)
+    handle.truncate()
+    handle.write(json.dumps(info, ensure_ascii=False).encode("utf-8") + b"\n")
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
+def _lock_state(info):
+    if not info:
+        return {"held": False, "stale": True}
+    since = info.get("heartbeat_at") or info.get("since")
     age_hours = None
     try:
         started = datetime.fromisoformat(str(since))
         age_hours = (datetime.now().astimezone() - started).total_seconds() / 3600
     except (ValueError, TypeError):
-        age_hours = None
-    alive = _pid_alive(info.get("pid"))
-    stale = (not alive) or (age_hours is not None and age_hours > LOCK_MAX_AGE_HOURS)
+        pass
+    stale = age_hours is None or age_hours < 0 or age_hours > LOCK_MAX_AGE_HOURS
+    held = not stale and not info.get("released")
     return {
-        "held": not stale,
+        "held": held,
         "pid": info.get("pid"),
-        "since": since,
+        "since": info.get("since"),
         "stale": stale,
         "age_hours": None if age_hours is None else round(age_hours, 1),
     }
 
 
-def acquire_lock(path=None):
-    """Take the single-run lock, replacing a stale lock left by a dead process."""
+def lock_status(path=None):
+    """Describe the 12-hour run lease; CLI process exit does not release the session."""
     path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
-    status = lock_status(path)
-    if status.get("held"):
-        if status.get("pid") == os.getpid():
-            return {"ok": True, "pid": os.getpid(), "since": status.get("since"),
-                    "reused": True}
-        return {"ok": False, "reason": "another run holds the lock", **status}
-    now = datetime.now().astimezone().isoformat(timespec="seconds")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"pid": os.getpid(), "since": now}, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    return {"ok": True, "pid": os.getpid(), "since": now,
-            "stale_replaced": bool(status.get("stale"))}
+    try:
+        with _locked_file(path) as handle:
+            if handle is None:
+                return {"held": False}
+            info = _read_lock(handle)
+    except OSError as error:
+        return {"held": False}
+    return _lock_state(info)
+
+
+def acquire_lock(path=None):
+    """Take a single-run lease, atomically replacing only an expired/released lease."""
+    path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
+    with _locked_file(path, create=True) as handle:
+        previous = _read_lock(handle)
+        status = _lock_state(previous)
+        if status.get("held"):
+            if status.get("pid") == os.getpid():
+                return {"ok": True, "pid": os.getpid(), "since": status.get("since"),
+                        "reused": True}
+            return {"ok": False, "reason": "another run holds the lock", **status}
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        info = {"pid": os.getpid(), "since": now, "heartbeat_at": now, "released": False}
+        _write_lock(handle, info)
+        return {"ok": True, "pid": os.getpid(), "since": now,
+                "stale_replaced": bool(status.get("stale"))}
 
 
 def release_lock(path=None):
-    """Remove the run lock; safe to call when no lock exists."""
+    """Mark the lease released; keep the file so updates stay serialized across processes."""
     path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
-    try:
-        path.unlink()
-        return {"ok": True, "released": True}
-    except FileNotFoundError:
+    if not path.is_file():
         return {"ok": True, "released": False}
+    with _locked_file(path) as handle:
+        info = _read_lock(handle)
+        if not info or info.get("released"):
+            return {"ok": True, "released": False}
+        info["released"] = True
+        info["released_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        _write_lock(handle, info)
+    return {"ok": True, "released": True}
+
+
+def refresh_lock(path=None):
+    """Extend a current lease at a durable running-session checkpoint."""
+    path = Path(DEFAULT_STATE.parent / "run.lock" if path is None else path)
+    with _locked_file(path) as handle:
+        if handle is None:
+            return {"ok": False, "reason": "run lock is missing"}
+        info = _read_lock(handle)
+        status = _lock_state(info)
+        if not status.get("held"):
+            return {"ok": False, "reason": "run lock lease is not active", **status}
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        info["heartbeat_at"] = now
+        _write_lock(handle, info)
+    return {"ok": True, "heartbeat_at": now}
 
 
 def _merge(base, patch):
@@ -272,6 +334,8 @@ def save(path, payload):
         raise ValueError("; ".join(errors))
     merged["last_updated"] = datetime.now().astimezone().isoformat(timespec="seconds")
     write_state_atomically(path, merged)
+    if merged.get("mode") == "running":
+        refresh_lock(_sidecar(path, "run.lock"))
     digest = hashlib.sha1(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()[:16]
@@ -341,7 +405,7 @@ def main(argv=None):
     save_command.add_argument(
         "--file", type=Path, help="JSON file to merge (default: stdin)"
     )
-    commands.add_parser("release", help="remove the run lock")
+    commands.add_parser("release", help="mark the run lease released")
     commands.add_parser("lock-status", help="report whether a run lock is held")
     args = parser.parse_args(argv)
 
@@ -363,7 +427,7 @@ def main(argv=None):
             state = save(args.state, payload)
         elif args.command == "release":
             result = release_lock(_sidecar(args.state, "run.lock"))
-            print(f"Run lock released: {result['released']}")
+            print(f"Run lease released: {result['released']}")
             return 0
         elif args.command == "lock-status":
             status = lock_status(_sidecar(args.state, "run.lock"))

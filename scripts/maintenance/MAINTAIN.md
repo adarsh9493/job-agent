@@ -16,6 +16,8 @@ explicitly starts a separate RUN session. Use test fixtures only.
 4. For data-format changes, test migrations on temporary fixtures; never migrate personal `data/`
    just to validate code. Migration tools plan by default, preserve fields, and make a recoverable
    backup before applying.
+5. The run lock spans short-lived helper processes as a 12-hour lease; checkpoint saves refresh it.
+   Test both process-exit persistence and competing acquisition before changing lock semantics.
 
 ## Validation protocol
 
@@ -34,6 +36,10 @@ deterministic fixture-only dry run must all pass. If canonical instructions chan
 adapters before this gate. Record test status and context bytes in `CHANGELOG.md`, commit the phase,
 and report the outcome in the maintenance session's required format. A dry run is not a live
 application run; its submit step is always stubbed.
+
+The browser-discovery rule is deliberate: background discovery uses `fresh_scan.py` only. Open the
+visible browser for a specific candidate as the start of an application attempt; do not use it for
+broad job searches. If no scanner adapter exists, record that company as unsearched and continue.
 
 ## Exit
 
