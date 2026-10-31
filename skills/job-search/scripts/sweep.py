@@ -1,26 +1,28 @@
-"""Round-robin sweep planner — single source of truth for sweep order and spacing.
+"""Round-robin planner for approved-company order and active interview blocking.
 
-User-approved policy (2026-10-17) — this REPLACES the old tiered per-company caps:
+User-approved policy (2026-10-20) — this REPLACES the old tiered per-company caps:
   * NO per-company caps (no 3/2 per 30 days, no 30-day window, no title-family cap).
+  * NO cooling period — apply to any company any time.
   * One role per company per round.
   * Sweep order = the companies.md list order (top to bottom), starting at a
     rotating cursor — each round resumes where the last round stopped. The cursor
     is taken from `sweep.cursor` in state.json when set, otherwise it is derived
     from the most recently applied company.
-  * Soft guard: a company applied within the last `min_days_between` days is
-    skipped ("cooling"). Default 3; --min-days 0 disables the guard entirely.
-  * A company with no role posted in the last 24 h is skipped for that round.
+  * Posting freshness is checked by the job-search workflow, not by this planner.
   * ATS-stated limits (a company's OWN rule, e.g. Waymo 5/60d) are still obeyed —
     those are not our cap.
+  * **Interview blocklist**: If any interview (recruiter screen, phone screen,
+    technical, on-site) is scheduled or in progress for a company, skip that
+    company until the process completes (offer or rejection). Loaded from
+    `interview_blocklist.active_interviews` in state.json.
 
 The tracker Excel is the source of truth for applications (folder confirmation
 screenshots are the source of truth for "did it go out"). Company names in the
 tracker are free text, so matching is done on a normalised alias key.
 
 Usage:
-    python skills/job-search/scripts/sweep.py                   # print the sweep order
-    python skills/job-search/scripts/sweep.py --company Lucid    # one company; exit 1 if cooling
-    python skills/job-search/scripts/sweep.py --min-days 0       # disable the spacing guard
+    python skills/job-search/scripts/sweep.py                   # print approved-company order
+    python skills/job-search/scripts/sweep.py --company Lucid    # check active interview block
 """
 from __future__ import annotations
 
@@ -35,17 +37,7 @@ PROJ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 TRACKER = os.path.join(PROJ, "data", "tracker", "applications.xlsx")
 COMPANIES = os.path.join(PROJ, "data", "profile", "companies.md")
 STATE = os.path.join(PROJ, "data", "state", "state.json")
-MIN_DAYS_DEFAULT = 3
-OTHER_WINDOW_DAYS = 90  # how far back to list companies that are not on the target list
-
-# tracker keys to keep OUT of the sweep order (staffing agencies + out-of-scope
-# robotics companies) — they are never swept, so they only add noise
-SKIP_TRACKER = (
-    "staffing", "indeed", "agilityrobotics", "figure", "apptronik",
-    "outrider", "bostondynamics", "symbotic", "locus", "zebra", "zipline",
-)
-
-# statuses that represent a real application (used for last-applied / spacing)
+# statuses that represent a real application (used to derive the rotating cursor)
 APPLIED_STATUS = (
     "applied", "application", "interview", "offer", "rejected",
     "in process", "under consideration", "assessment", "screening",
@@ -131,9 +123,18 @@ def norm(name: str) -> str:
 def key(name: str) -> str:
     """Canonical company key for a tracker company name or a board slug."""
     n = norm(name)
-    for a, k in ALIASES.items():
-        if a in n:  # name contains the alias
-            return k
+    if n in ALIASES:
+        return ALIASES[n]
+    matches = []
+    for alias, canonical in ALIASES.items():
+        match = re.search(
+            rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])",
+            (name or "").lower(),
+        )
+        if match:
+            matches.append((match.start(), -len(alias), canonical))
+    if matches:
+        return min(matches)[2]
     return n
 
 
@@ -177,16 +178,6 @@ def applied_keys() -> set[str]:
     return {key(r["company"]) for r in _rows() if r["company"]}
 
 
-def display_names() -> dict[str, str]:
-    """key -> a readable display name (first tracker name seen for that key)."""
-    out: dict[str, str] = {}
-    for r in _rows():
-        k = key(r["company"])
-        if k and k not in out:
-            out[k] = r["company"]
-    return out
-
-
 def company_list(path: str = COMPANIES) -> list[str]:
     """Ordered target companies parsed from the numbered tier tables of companies.md."""
     names: list[str] = []
@@ -227,11 +218,28 @@ def _state_sweep() -> dict:
         return {}
 
 
-def _state_min_days() -> int:
+def _state_interview_blocklist() -> list[dict]:
+    """Load active interviews from state.json interview_blocklist."""
     try:
-        return int(_state_sweep().get("min_days_between", MIN_DAYS_DEFAULT))
-    except (ValueError, TypeError):
-        return MIN_DAYS_DEFAULT
+        with open(STATE, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+            blocklist = data.get("interview_blocklist", {})
+            if blocklist.get("enabled", False):
+                return blocklist.get("active_interviews", [])
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return []
+
+
+def is_interview_blocked(company_key: str) -> tuple[bool, str]:
+    """Check if a company has an active interview. Returns (blocked, reason)."""
+    interviews = _state_interview_blocklist()
+    for interview in interviews:
+        # Match by company key
+        if company_key.lower() in interview.get("company", "").lower():
+            stage = interview.get("stage", "unknown")
+            return True, f"active interview ({stage})"
+    return False, ""
 
 
 def _resolve_rows(companies_file: str, la: dict, keys: set) -> list[dict]:
@@ -254,19 +262,16 @@ def _auto_cursor(rows: list[dict]) -> int:
     return (max(i for i, d in dated if d == newest) + 1) % len(rows)
 
 
-def plan(today: date | None = None, min_days: int | None = None,
-         companies_file: str = COMPANIES, cursor: str | None = None) -> list[dict]:
-    """Return the sweep plan: companies.md list order, rotated to start at the cursor.
+def plan(today: date | None = None, companies_file: str = COMPANIES,
+         cursor: str | None = None) -> list[dict]:
+    """Return approved companies in list order, rotated to start at the cursor.
 
     `cursor` may be a company name/key. When omitted, the saved `sweep.cursor` from
     state.json is used; when that is absent too, the cursor is derived from the most
     recently applied company so each round resumes where the last round stopped.
     """
-    if min_days is None:
-        min_days = _state_min_days()
     today = today or date.today()
     la = last_applied()
-    names = display_names()
     keys = applied_keys() | set(la)
     rows = _resolve_rows(companies_file, la, keys)
 
@@ -283,71 +288,63 @@ def plan(today: date | None = None, min_days: int | None = None,
 
     ordered = rows[start:] + rows[:start]
 
-    entries, seen = [], set()
+    entries = []
     for i, r in enumerate(ordered):
         days = (today - r["last"]).days if r["last"] else None
+        interview_blocked, interview_reason = is_interview_blocked(r["key"])
         entries.append({"company": r["company"], "last": r["last"], "days": days,
-                        "cooling": bool(min_days > 0 and days is not None and days < min_days),
+                        "interview_blocked": interview_blocked,
+                        "interview_reason": interview_reason,
                         "idx": r["idx"], "start": i == 0})
-        seen.add(r["key"])
-
-    for k in sorted(keys - seen):
-        last = la.get(k)
-        if not last or (today - last).days > OTHER_WINDOW_DAYS:
-            continue
-        if any(tok in k for tok in SKIP_TRACKER):
-            continue
-        days = (today - last).days
-        entries.append({"company": names.get(k, k), "last": last, "days": days,
-                        "cooling": bool(min_days > 0 and days < min_days),
-                        "idx": 10_000, "start": False})
     return entries
 
 
-def status(company: str, today: date | None = None, min_days: int = MIN_DAYS_DEFAULT) -> dict:
-    """Is this company cleared to apply today? Returns the reason when it is cooling."""
+def status(company: str, today: date | None = None) -> dict:
+    """Return the most recent application and active-interview status."""
     today = today or date.today()
     la = last_applied()
     k = key(company)
     linked = _link(k, set(la) | applied_keys()) or k
     last = la.get(linked)
     days = (today - last).days if last else None
-    cooling = bool(min_days > 0 and days is not None and days < min_days)
-    if last is None:
+    interview_blocked, interview_reason = is_interview_blocked(linked)
+    if interview_blocked:
+        reason = f"interview block: {interview_reason}"
+    elif last is None:
         reason = "free (never applied)"
-    elif cooling:
-        reason = f"cooling: applied {days}d ago (needs {min_days}d)"
     else:
         reason = "free"
-    return {"company": company, "last": last, "days": days, "cooling": cooling, "reason": reason}
+    return {"company": company, "last": last, "days": days,
+            "interview_blocked": interview_blocked, "reason": reason}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--company")
     ap.add_argument("--today")
-    ap.add_argument("--min-days", type=int, default=None)
     ap.add_argument("--cursor", help="start the sweep at this company (name or tracker key)")
     ap.add_argument("--companies-file", default=COMPANIES)
     args = ap.parse_args()
-    min_days = _state_min_days() if args.min_days is None else args.min_days
     today = datetime.strptime(args.today, "%Y-%m-%d").date() if args.today else date.today()
 
     if args.company:
-        s = status(args.company, today, min_days)
-        verdict = "COOLING" if s["cooling"] else "OK"
-        print(f"{s['company']}: last={s['last']} -> {verdict} ({s['reason']})")
-        return 1 if s["cooling"] else 0
+        s = status(args.company, today)
+        flags = []
+        if s.get("interview_blocked"):
+            flags.append(f"INTERVIEW_BLOCKED({s.get('interview_reason','')})")
+        flag = ", ".join(flags) if flags else "OK"
+        print(f"{s['company']}: last={s['last']} -> {flag} ({s['reason']})")
+        return 1 if s.get("interview_blocked") else 0
 
-    entries = plan(today, min_days, args.companies_file, args.cursor)
+    entries = plan(today, args.companies_file, args.cursor)
     start = next((e["company"] for e in entries if e.get("start")), "?")
-    print(f"round-robin sweep (list order, rotating cursor) — {today}  "
-          f"(spacing guard = {min_days}d; 0 = off)\n"
+    print(f"approved-company order (rotating cursor) — {today}\n"
           f"round starts at: {start}\n")
     for e in entries:
         last = e["last"] or "never"
         days = "-" if e["days"] is None else f"{e['days']}d"
-        flag = "COOLING" if e["cooling"] else "ok"
+        flag = (f"INTERVIEW_BLOCKED({e.get('interview_reason','')})"
+                if e.get("interview_blocked") else "ok")
         mark = "->" if e.get("start") else "  "
         print(f"  {mark} {e['company']:<26} last {str(last):<12} ({days:>5})  {flag}")
     return 0

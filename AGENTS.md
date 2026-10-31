@@ -1,7 +1,8 @@
 # Job Agent
 
 An autonomous job-application agent. All personal and generated data lives in `data/`
-(gitignored). Logic lives here, in `skills/`, and in `templates/`.
+(gitignored). Workflow instructions live in `.github/skills/`; helper logic lives in `skills/` and
+`templates/`.
 
 Read this file first. Then load the matching skill with the `skill` tool before doing a task.
 Do not duplicate rules across files — reference this one.
@@ -21,7 +22,7 @@ Do not duplicate rules across files — reference this one.
    interview). When a JD demands a skill the user lacks, note it honestly in the tracker/notes —
    do not ask and do not block. The only reason to pause is a genuine legal/eligibility unknown
    (rule 4).
-4. **Never submit** if a legal/eligibility answer is unknown. Ask the user.
+4. **Never submit** when the user is legally or otherwise ineligible, or when a required legal answer is genuinely unknown. For sponsorship specifically, apply when the posting is silent; block only when the posting explicitly says sponsorship is unavailable or the profile otherwise establishes ineligibility. For other genuine legal/eligibility blockers, pause the current application, inform the user, log it to `data/profile/legal-blockers.json`, and continue to the next application without waiting.
 5. **Never store** SSN, government ID numbers, bank or card numbers. If a form asks, pause and
    let the user enter it manually.
 6. **Respect work-authorization limits.** Never apply to roles the user is ineligible for.
@@ -36,15 +37,18 @@ Do not duplicate rules across files — reference this one.
    triggers the implicit "Submit application" button and can submit mid-fill (happened 2026-10-12
    on Lucid). Close menus with Escape.
    **Review every filled form twice (mandatory 2-pass review) before clicking Submit.**
-   Applications #1–#2 were a supervised test run (explicit user approval each time, granted
-   2026-10-12). From application #3 on, the agent submits **on its own** but only after both passes
-   pass: **pass 1 (truth & eligibility)** — no invented facts, every answer matches
+   The former supervised-approval gate for applications #1–#2 was retired by the user on
+   2026-10-28. The agent submits **on its own** whenever both passes pass:
+   **pass 1 (truth & eligibility)** — no invented facts, every answer matches
    `data/profile/profile.json` + `answers-bank.json`, role is eligible (location, work auth,
    sponsorship, salary floor), no SSN/bank/government numbers; **pass 2 (completeness &
    accuracy)** — every required field filled with the exact observed option texts, expected comp
-   in range, education shows CSU Fullerton + JNTU only (never Trine), resume + cover letter
-   attached (visible filename text), EEO per profile. Only then click Submit. The full checklist
-   lives in `skills/application-fill/SKILL.md`.
+   in range, education shows CSU Fullerton + JNTU only (never Trine), resume attached (visible
+   filename text), any other documents the portal requires and supports attached, and EEO per
+   profile. Attach the cover letter when the portal provides or requires an upload field; if it
+   does not, that alone is not a reason to block submission. Record the portal limitation in the
+   tracker. Only then click Submit. The full checklist lives in
+   `.github/skills/application-fill/SKILL.md`.
 10. **Write like a human.** Every free-text answer (application questions, "what draws you to this
     role", cover letters, recruiter messages) must read like the user talking — natural, specific,
     plain-spoken. No resume-speak, no buzzword stacking, no templated filler. Use only real
@@ -54,11 +58,17 @@ Do not duplicate rules across files — reference this one.
 11. **Be autonomous — don't lean on the user.** Decide, act, and record. The moment a new answer is
     learned, save it to `data/profile/answers-bank.json` so it is never asked twice, and self-answer
     anything consistent with the profile. Batch any genuinely required questions and ask at most once
-    per session. Only a legal/eligibility unknown (rule 4) may pause an application. Target: run a
+    per session. **Legal/eligibility unknowns (rule 4) are the only exception:** pause the current application, inform the user, log the blocker to `data/profile/legal-blockers.json`, and immediately continue to the next application — do not wait for a response. Target: run a
     full session needing zero input between "start" and "stop". **Adaptation target: a brand-new user
     must reach full autonomy within at most 5 applications** — every new question is saved to the
     answers bank and reused, so asks converge to zero. Keep the setup user-agnostic (all personal
     data under `data/`) because the user intends to share this agent with friends.
+12. **Use one browser page at a time.** Reuse one visible page and navigate it sequentially; do not
+    open parallel tabs/pages for separate companies, jobs, or duplicate searches. Close a finished
+    page when the browser tool exposes a close operation, and verify that it is closed before opening
+    another. At stop, close the remaining workflow page when supported. If the available browser
+    controls do not expose existing pages or a close operation, do not claim they were closed: reuse
+    a single page, open no additional pages, and report the limitation.
 
 ## File hygiene
 
@@ -67,10 +77,10 @@ Do not duplicate rules across files — reference this one.
 - Each job folder `data/applications/<Company>_<Title>_<JobID>_<YYYY-MM-DD>/` keeps only:
   resume PDF, cover-letter PDF, `job-description.md`, and the confirmation screenshot
   (keep DOCX only if a portal requires it).
-- **After a successful submit**, move the job folder from `data/applications/current/` to
-  `data/applications/history/` — a folder counts as *applied* once it holds
-  a confirmation screenshot — `confirmation_screenshot.png`, any image file, or any file named with `confirm`/`applied`/`success` (a manual apply may save it under any name). Running `python skills/documentation.py` archives every applied
-  folder left in `current/`; `python skills/archive_hook.py` watches `current/` and archives automatically (or `--once` for a single pass).
+- **After a successful submit**, run `python skills/documentation.py` once to move confirmed job
+  folders from `data/applications/current/` to `data/applications/history/`. A folder counts as
+  applied when it holds `confirmation_screenshot.png`, any image file, or a file named with
+  `confirm` / `applied` / `success`. Run the same command at stop to catch manually applied folders.
 - Names: `<First>_<Last>_Resume.pdf` and `<First>_<Last>_CoverLetter.pdf` (no company name — each job has its own folder).
 - Clear downloads, temp files, and failed drafts after each application.
 - Before ending any session, confirm the project folder is clean and organized.
@@ -82,12 +92,21 @@ Do not duplicate rules across files — reference this one.
 - **stop** — finish or safely abort the current form, save state (company, job, step, queue), halt.
   The next start resumes exactly there.
 - **I found a job** — stop permanently, summarize stats, ask whether to keep the setup for later.
-- **Archive hook.** Start `python skills/archive_hook.py` (background watcher) at **start** and let it
-  run for the session; it moves any `current/` folder that gains a confirmation screenshot (any image file, or any file named with confirm/applied/success — so a manual apply works too) into
-  `history/`. `python skills/archive_hook.py --once` is an idempotent one-shot archive — safe to run
-  after any submit and at **stop**.
-- Keep a **30–90 s pause between applications**. Every ~5 applications give a brief progress summary. **Stop after ~12 applications** (session budget) and report.
-- At every stop / session end, remind: *"No daily application cap is set. Want to set one?"*
+- Apply sequentially. Do not add an artificial delay between applications; respect portal rate
+  limits and wait when the site requires it. Give a brief progress summary about every 5 applications.
+
+## Efficient operation
+
+- Load the profile, tracker, answers bank, approved-company list, and session state once per session;
+  reuse them across the sweep and re-read only after an update or when a source may have changed.
+- Batch independent candidate checks and reads when practical, but keep applications sequential and
+  retain every source, eligibility, document, and two-pass submission check.
+- Reuse verified company evidence, portal sessions, and saved answers while they remain current.
+  Inspect full job descriptions only for fresh candidates; do not repeatedly process unrelated page
+  content or reread unchanged files.
+- Keep browser work focused on the active company/job. Follow hard rule 12: one page at a time,
+  sequential navigation, and close finished pages when supported. Never optimize by weakening
+  eligibility or submission safeguards.
 
 ## Skill map
 
@@ -131,10 +150,7 @@ Do not duplicate rules across files — reference this one.
   **only when the product is an automotive vehicle** — off-highway autonomy (mining haulage → Pronto
   was dropped for exactly this, quarry, agriculture, construction), warehouse/yard robotics, humanoid
   robotics (Agility, Figure, Apptronik, Boston Dynamics, Outrider), drones, maritime, rail and
-  aerospace are OUT. **Priority order per role: 1) automotive industry → 2) position name (the
-  logic's role names: ADAS, AV, integration, validation, HIL/SIL, test automation, reliability,
-  verification, systems integration, quality-validation, embedded/ECU, EV/powertrain, infotainment)
-  → 3) domain breadth.**
+  aerospace are OUT.
 - **Role-function filter (user directive 2026-10-14): the user is a tester, not a developer.**
   Queue **test / validation / verification / integration / HIL-SIL-MIL / test-automation / reliability**
   roles. Reject roles whose primary job is writing product code — Software Engineer, Developer,
@@ -142,16 +158,21 @@ Do not duplicate rules across files — reference this one.
   science, platform / SRE / DevOps. `Software **Test** Engineer` / `Software **Validation** Engineer`
   are IN scope (testing the software); plain "Software Engineer" is not. Ambiguous title → judge by
   the JD responsibilities.
-- **Domain focus (user directive 2026-10-14, revised): autonomous-vehicle testing/validation is the
-  lead domain — then equal breadth.** Search **AV test / AV validation / AV systems integration & test
-  / AV vehicle-level, simulation and behaviour validation / AV test operations & test infrastructure**
-  — plus anything adjacent to AV validation — **first**, and give AV-validation roles the first queue
-  slots. Then one query set each for infotainment / IVI / HMI / connected-vehicle, HIL-SIL test,
-  systems integration & test, ADAS/AD validation, EV / battery / powertrain / charging, embedded / ECU
-  / CAN diagnostics, quality / reliability / DVP&R, test automation and software validation.
-  **Chassis / thermal / NVH is dropped** (user directive 2026-10-14). Never over-weight infotainment.
-  Still tester-only: AV roles that write product code stay out; AV test/validation/integration roles
-  are in.
+- **STRICT DOMAIN LOCK — ADAS/AD validation ONLY (user directive 2026-10-25: "only apply for
+  validation roles in automotive industry. for ADAS and autonomous driving (AD). strictly." Goal:
+  land a validation job ASAP).** Apply ONLY to roles that pass BOTH filters: (1) automotive industry
+  (first filter, unchanged) and (2) the role is **validation / verification / test / systems
+  integration / HIL-SIL-MIL / simulation / sensor validation / test automation for ADAS or AD /
+  autonomy**. Everything else is OUT from now on — regardless of score, freshness, or portal
+  convenience: EV / battery / powertrain / charging validation, infotainment / IVI / HMI / audio QA,
+  plant / warranty / production quality, generic SDET / QA roles not tied to the ADAS-AD stack, and
+  hardware validation (seating, passive safety, cleaning systems, generic HW test). Re-grade the
+  pre-tailored folders in `data/applications/current/` against this rule at start; drop the ones
+  outside it. On ambiguity: if the JD's validation target is ambiguous, judge by whether ADAS/AD
+  content (sensors, perception, planning, ADAS HIL/SIL rigs, driving validations) is the primary
+  focus — if the role is generic software QA that could apply to anything, it is OUT. This
+  is the only domain scope. Sweep rounds every session and apply immediately when an in-scope role
+  is found.
 - **Gmail watch (user directive 2026-10-14): keep the tracker current in near-real time.** Check the
   job inbox with narrow queries (portal sender domain + `since`) at session start, after every
   single application, after every burst, and at least every ~15–20 min while the session is
@@ -159,7 +180,17 @@ Do not duplicate rules across files — reference this one.
   the moment it arrives, and report new responses at the next check-in. Read only application
   responses / OTPs / confirmations from portals in use — nothing else (rule 2).
 - Source of truth for applied: applications folder confirmations (confirmation_screenshot.png). Do NOT trust tracker count alone.
-- **Round-robin sweep — no per-company caps, no max-5 queue (user-approved 2026-10-17).** Walk the company list **one role per company, in companies.md list order (top→bottom)**, starting at a **rotating cursor** (each round resumes where the last one stopped; the cursor comes from `sweep.cursor` in `state.json` when set, else it is derived from the most recently applied company) — get the order + spacing check from `python skills/job-search/scripts/sweep.py` (`... --company "Lucid Motors"` exits 1 when the company is cooling). Queue one role per company (24h preferred / 7d fallback, >7d never, manager filter, dedupe vs tracker+prior-apps). A company applied to within the last **3 days** is COOLING — skip it this round (`min_days_between` in `state.json`; `--min-days 0` disables the guard). A company with no role posted in the last 24 h is skipped that round. A company with several fresh roles queues its best (newest <24h, then highest match); the rest wait for the next round. Obey a company's **own** ATS-stated limit (e.g. Waymo 5/60d) — that is not our cap. Then apply **sequentially, one by one through the list**: tailor+fill+submit with PDF content verification (no {{tokens}}, >=200 chars, contains name). When the round ends, continue from the cursor (the next round starts where the last one left off). **Never apply one-by-one in parallel** — apply in order. Session budget: **~12 applications per session**, then stop and report.
+- **Round-robin sweep — no per-company caps, queue cap, or cooling period.** Walk the approved
+  `companies.md` list in order from the saved rotating cursor. Queue one fresh, eligible, nonduplicate
+  role per company per round; prefer roles posted in the last 24 hours, allow up to 7 days only when
+  fresher results are exhausted, and never use unknown or older dates. Use `sweep.py` for list order
+  and the active-interview blocklist only; stale spacing settings in `state.json` must not cool a
+  company. `fresh_scan.py` is the only automated posting scanner; for unsupported boards or scan
+  failures, search the official career portal directly (no scanner result is not proof of no jobs).
+  Classify the company's business from its own sources and the role's business line before queuing.
+  Verify ADAS/AD is the primary target in the full JD; the scanner's title match is not approval.
+  Score and tailor the exact resume PDF, but never skip an eligible role for a low score. Apply
+  sequentially, with full two-pass review and PDF checks before submission.
 - PDF verification: verify before upload (resume >=200 chars with name, no tokens; cover >=100 chars). Regenerate if fails.
 - The sweep order is the companies.md list order (top→bottom) with a rotating cursor. Within a round, prefer a company's never-applied-to state when picking among its fresh roles — but do not reorder the list.
-- Daily cap reminder: suppressed unless explicitly asked.
+- Do not add a daily application cap or cap reminder unless the user asks for one.

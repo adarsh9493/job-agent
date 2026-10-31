@@ -1,72 +1,39 @@
 # Prerequisites
 
-Everything the Job Agent needs, with the versions verified in this workspace and how a new user
-gets each one. The agent checks and installs missing pieces automatically on the first run
-(section D of the build prompt).
+The supported workflow runs in GitHub Copilot Chat in VS Code. It needs the interactive browser and
+Gmail tools; there is no standalone Python search/apply runner and no first-run dependency installer.
 
-## Detected environment (baseline)
+## Required software
 
-| Component                    | Version / value                                                        | Status     |
-| ---------------------------- | ---------------------------------------------------------------------- | ---------- |
-| OS                           | Windows 11 (`Microsoft Windows NT 10.0.26200.0`)                        | ✅         |
-| OpenCode                     | `v2.0.24`                                                               | ✅         |
-| Node.js                      | `v24.21.0`                                                              | ✅         |
-| npm                          | `12.2.0`                                                                | ✅         |
-| Python                       | `3.15.0`                                                                | ✅         |
-| Git                          | `2.55.0.windows.5`                                                      | ✅         |
-| Google Chrome (stable)       | `C:\Program Files\Google\Chrome\Application\chrome.exe`                 | ✅         |
-| Playwright (Python)          | `1.63.0`                                                                | ✅         |
-| Playwright Chromium          | Chrome for Testing `153.0.8010.12` (revision 1243)                      | ✅         |
-| openpyxl (Excel library)     | `3.1.5`                                                                 | ✅         |
-| HTML → PDF                   | Playwright Chromium headless `page.pdf()`                               | ✅         |
+| Component | Minimum |
+|---|---|
+| Windows | 10/11 |
+| VS Code | Current stable release |
+| GitHub Copilot Chat | Current version with Agent mode and Agent Skills enabled |
+| Node.js | 20+ |
+| Python | 3.11+ |
+| Git | 2.40+ |
+| Google Chrome | Stable |
+| Playwright Python package | 1.60+ |
+| `openpyxl` | 3.1+ |
+| `pypdf` | Current version |
 
-## MCP servers
-
-All are configured and reported **connected** by `opencode mcp list`:
-
-| Server                | Purpose                                                        |
-| --------------------- | -------------------------------------------------------------- |
-| `playwright`          | Visible Chrome browser for login and application submission    |
-| `gmail`               | Read verification links, OTPs, application confirmations       |
-| `filesystem`          | File access within the workspace                               |
-| `github`              | Version control / repo operations                              |
-| `context7`            | Up-to-date library/framework documentation                     |
-| `sequential-thinking`  | Structured multi-step reasoning                                |
-
-## Install / verify commands
-
-Run these if setting up a fresh machine:
+Install missing Python packages and the Playwright browser:
 
 ```powershell
-# Core runtimes (install if missing)
-node --version                 # expect v20+
-python --version               # expect 3.11+
-git --version
-winget install --id Google.Chrome
-
-# Playwright + browser
-python -m pip install --upgrade playwright
+python -m pip install playwright openpyxl pypdf
 python -m playwright install chromium
-
-# Excel library
-python -m pip install openpyxl
-
-# Verify MCP servers
-opencode mcp list
 ```
 
-## Browser strategy (minimize CAPTCHAs)
+## Required agent tools
 
-- Use a **persistent browser profile** so cookies, sessions, and trusted-device signals survive
-  between runs.
-- Use **real Chrome** (`channel: "chrome"`) with the normal user agent, not a headless/automation
-  fingerprint.
-- Act with **slow, human-paced, sequential** interactions (one action at a time, natural delays).
-- Keep **one account per portal** and reuse the session for other roles at the same company.
+- **Playwright MCP** — visible browser access for company career portals, configured in
+  `.vscode/mcp.json`.
+- **Gmail/MCPEmails** — user-configured email access for narrowly scoped OTPs and application
+  responses.
 
-## Notes
+Confirm the skills are listed in **Chat: Configure Skills** and the MCP tools are available in
+Copilot Chat before starting. GitHub, Context7, filesystem, and sequential-thinking servers are
+optional and are not required for the application flow.
 
-- The visible browser is used only from portal login through final submission; all other work runs
-  in the background.
-- The Gmail MCP server must be authenticated to the user's existing job email. Verify with a
-  harmless, narrow, job-related search.
+See [SETUP.md](SETUP.md) for first-run steps and [AGENTS.md](AGENTS.md) for the authoritative rules.

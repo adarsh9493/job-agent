@@ -1,6 +1,6 @@
 ---
-name: Tracker
-description: Maintain the Excel application tracker (data/tracker/applications.xlsx), update it after every application, check Gmail for responses, and report summaries on start and stop.
+name: tracker
+description: Use when updating or reporting on application status. Maintain the Excel tracker, check narrowly scoped portal email responses, and summarize on start and stop.
 ---
 
 # Tracker
@@ -13,7 +13,7 @@ responses.
 `data/tracker/applications.xlsx` — two sheets: `Applications` (the data) and `Legend` (the color
 key). Create it with openpyxl if missing, using exactly the columns and colors below.
 
-## Columns (exactly these 11, in this order — do not add, remove, or reorder)
+## Columns (exactly these 12, in this order — do not add, remove, or reorder)
 
 | Col | Header       |
 | --- | ------------ |
@@ -28,6 +28,10 @@ key). Create it with openpyxl if missing, using exactly the columns and colors b
 | I   | Portal/ATS   |
 | J   | **Status**   |
 | K   | Notes        |
+| L   | **Match %**  |
+
+`Fit Score` (H) is a separate profile-fit field. The tailoring match score belongs in `Match %` (L).
+Keep the existing workbook headers and order; do not move or rename columns.
 
 There is **no** Account email, **no** Resume path / Cover letter path, and **no** Follow-up date
 column. The account is always the profile's job email, follow-ups are computed (see below), and the
@@ -66,14 +70,16 @@ Keep a **list data-validation dropdown** on `J2:J1000` restricted to these value
    dated line to `Notes`, and report new responses at the next check-in. This keeps the sheet
    ("the application page") current without the user asking.
 4. On every **start** and **stop** show a short summary: new responses (interviews and offers
-   first), follow-ups due, totals applied / blocked. Ask the user **once** whether they also want
-   the summary emailed to their job email.
+   first), follow-ups due, totals applied / blocked. Do not send email unless the user explicitly
+   requests it.
 
 ## Rules
 
 - Never add a separate response or follow-up column; fold responses into `Status`.
 - **Follow-up due** = `Date Applied` + 7 days while `Status` = `Applied` (compute it, don't store it).
 - Keep the `Notes` cell self-contained: wrap text, top-align, no fixed row height (auto-fit).
+- Store the final resume-PDF match score in column L (`Match %`) after tailoring; never substitute
+  the separate Fit Score in column H.
 - Pre-existing applications (from a prior agent) are recorded as normal rows with a `Notes` line
   marking them; they still block duplicates.
 

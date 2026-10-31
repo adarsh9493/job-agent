@@ -1,27 +1,25 @@
-"""Fresh-role scanner for the round-robin sweep.
+"""Discover fresh candidate postings on a single company's public career board.
 
-Queries every API-accessible ATS board (Greenhouse, Lever, Ashby, SmartRecruiters,
-Workday CXS) for the target companies, filters to fresh (<= --max-days) in-scope
-TESTER roles (test / validation / verification / integration / HIL-SIL / quality /
-reliability), excludes dev + manager + non-US postings, and prints one line per hit
-in companies.md sweep order.
+This scanner is not an eligibility or domain gate. The agent must inspect the full
+job description and company evidence before a role is queued.
 
 Usage:
-    python skills/job-search/scripts/fresh_scan.py                 # all boards, <=7d
-    python skills/job-search/scripts/fresh_scan.py --max-days 3    # stricter freshness
+    python skills/job-search/scripts/fresh_scan.py --company motional
     python skills/job-search/scripts/fresh_scan.py --company motional --verbose
-    python skills/job-search/scripts/fresh_scan.py --probe         # only report which boards respond
+    python skills/job-search/scripts/fresh_scan.py --probe
 """
 from __future__ import annotations
 
 import argparse
+from email.utils import parsedate_to_datetime
 import json
 import re
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta
+import xml.etree.ElementTree as ET
+from datetime import date, datetime, timedelta, timezone
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
@@ -41,7 +39,7 @@ BOARDS: dict[str, list[dict]] = {
     "woven": [{"type": "lever", "token": "woven-by-toyota"}],
     "kodiak": [{"type": "greenhouse", "token": "kodiakrobotics"},
                {"type": "greenhouse", "token": "kodiak"}],
-    "gatik": [{"type": "greenhouse", "token": "gatik"}],
+    "gatik": [{"type": "greenhouse", "token": "gatikaiinc"}],
     "maymobility": [{"type": "greenhouse", "token": "maymobility"}],
     "torc": [{"type": "greenhouse", "token": "torcrobotics"},
              {"type": "greenhouse", "token": "torc"}],
@@ -61,19 +59,19 @@ BOARDS: dict[str, list[dict]] = {
     "hyundai": [],
     "kia": [],
     "nissan": [],
-    "bmw": [],
+    "bmw": [{"type": "successfactors_rss", "base": "https://jobs.bmwgroup.com"}],
     "mercedes": [],
     "vw": [],
     "volvo": [{"type": "greenhouse", "token": "volvocars"}],
     "polestar": [{"type": "greenhouse", "token": "polestar"}],
-    "paccar": [],
+    "paccar": [{"type": "successfactors_rss", "base": "https://jobs.paccar.com"}],
     "navistar": [],
     "cummins": [{"type": "greenhouse", "token": "cummins"}],
     "bosch": [{"type": "smartrecruiters", "token": "BoschGroup"}],
     "continental": [{"type": "smartrecruiters", "token": "Continental"}],
-    "zf": [],
+    "zf": [{"type": "successfactors_rss", "base": "https://jobs.zf.com"}],
     "valeo": [],
-    "lear": [],
+    "lear": [{"type": "successfactors_rss", "base": "https://jobs.lear.com"}],
     "visteon": [],
     "harman": [],
     "panasonic": [],
@@ -98,6 +96,7 @@ BOARDS: dict[str, list[dict]] = {
     "sonatus": [{"type": "greenhouse", "token": "sonatus"}],
     "botauto": [{"type": "greenhouse", "token": "botauto"}],
     "tula": [{"type": "greenhouse", "token": "tulainternational"}],
+    "nexteer": [{"type": "successfactors_rss", "base": "https://jobs.nexteer.com"}],
 }
 
 # candidates tried in order when the primary token is unreachable (probe order matters)
@@ -130,32 +129,36 @@ BOARD_FIXES: dict[str, list[dict]] = {
 }
 
 # ---- title filters -------------------------------------------------------
-# User preferences (2026-10-17): only validation, test, system engineer roles
-# for ADAS, infotainment, autonomous driving; plus integration engineer roles.
-# Michigan-only location filter.
+# Candidate-title filter only; the full JD determines ADAS/AD scope.
 TESTER = re.compile(
-    r"\b(test|testing|validation|verif|v&v|integration|hil|sil|mil\b|reliab|quality|"
-    r"dvp|dependab|systems? engineer|embedded|ecu|diagnostic|calibrat|advs|adas|"
-    r"autonomy|autonomous|vehicle|infotainment|ivi|hmi|"
-    r"cyber.*test|scenario|integration engineer)", re.I)
+    r"\b(test|testing|validation|verif|integration|hils?|sils?|mils?|"
+    r"simulation|sensor validation|test automation|reliability\s+(test|validation))\b", re.I)
+
+# Exclude all development/design/manufacturing/process/quality/supplier/calibration/controls/hardware roles
+# Also exclude operator, technician, student, co-op, intern, contract roles
+# KEEP: "test engineer", "validation engineer", "verification engineer", "integration test engineer", "integration validation engineer"
 DEV_OUT = re.compile(
     r"(software (engineer|developer|intern)|\bswe\b|full.?stack|backend|frontend|"
     r"web ?\d|android|ios\b|machine learning|\bml\b|data (engineer|scientist)|"
     r"research scientist|algorithms?|platform engineer|sre|devops|cloud|"
-    r"developer|firmware engineer|application engineer|cloud)", re.I)
-
-# Dev-leaning integration roles that pass the TESTER filter but are actually dev roles
-# These titles often require embedded C/C++, AUTOSAR RTE, CI/CD, bringing up ECUs
-# rather than test/validation/HIL work. Added 2026-10-18 after Applied Intuition rejection.
-DEV_INTEGRATION = re.compile(
-    r"\b(software integration engineer|systems integration engineer)\b", re.I)
+    r"developer|firmware engineer|application engineer|cloud|"
+    r"software engineer|"
+    r"hardware engineer|controls engineer|calibration engineer|"
+    r"design engineer|development engineer|development.*validation|development.*test|"
+    r"project engineer|manufacturing engineer|process engineer|quality engineer|"
+    r"hardware reliability|supplier.*engineer|manufacturing.*engineer|"
+    r"production engineer|test.*developer|"
+    r"embedded.*engineer|ecu.*engineer|diagnostic.*engineer|"
+    r"firmware.*engineer|application.*engineer|operator|technician|"
+    r"student|co-?op|intern|contract)", re.I)
 
 MGR_OUT = re.compile(r"(\bmanager\b|director|head of|\bvp\b|chief |supervisor)", re.I)
 JUNK_OUT = re.compile(
     r"(intern|co-?op|apprentice|sales|marketing|finance|accounting|\bhr\b|human resources|"
     r"legal|recruiter|talent|procurement|supply chain|buyer|driver|technician|"
     r"product manager|program manager|project manager|customer|field service|"
-    r"security engineer|privacy|environmental|health & safety|esg)", re.I)
+    r"security engineer|privacy|environmental|health & safety|esg|"
+    r"hardware reliability|hw reliability)", re.I)
 NON_US = re.compile(
     r"(india|bangalore|bengaluru|pune|hyderabad|chennai|noida|gurgaon|beijing|shanghai|"
     r"germany|munich|berlin|stuttgart|india|japan|tokyo|korea|seoul|china|uk\b|london|"
@@ -191,6 +194,33 @@ def http_text(url: str) -> str | None:
             return resp.read().decode("utf-8", "replace")
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, OSError):
         return None
+
+
+def parse_successfactors_rss(xml_text: str) -> list[dict]:
+    """Normalize a SuccessFactors RSS feed into scanner postings."""
+    root = ET.fromstring(xml_text)
+    jobs = []
+    for item in root.findall(".//item"):
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip().split("?", 1)[0]
+        pub_date = (item.findtext("pubDate") or "").strip()
+        if not title or not link:
+            continue
+        location = ""
+        match = re.match(r"^(.*?)\s*\(([^()]*)\)\s*$", title)
+        if match:
+            title, location = match.group(1).strip(), match.group(2).strip()
+        posted = ""
+        if pub_date:
+            try:
+                published = parsedate_to_datetime(pub_date)
+                if published.tzinfo is None:
+                    published = published.replace(tzinfo=timezone.utc)
+                posted = published.astimezone(timezone.utc).date().isoformat()
+            except (TypeError, ValueError, OverflowError):
+                pass
+        jobs.append({"title": title, "location": location, "posted": posted, "url": link})
+    return jobs
 
 
 def _workday_posted(text: str) -> str:
@@ -377,6 +407,16 @@ def fetch_board(spec: dict) -> list[dict] | None:
             if page >= (pag.get("NofPages") or 1):
                 break
         return out or None
+    if t == "successfactors_rss":
+        url = (f"{spec['base']}/services/rss/job/?locale=en_US"
+               f"&keywords={urllib.parse.quote('')}")
+        xml_text = http_text(url)
+        if xml_text is None:
+            return None
+        try:
+            return parse_successfactors_rss(xml_text)
+        except ET.ParseError:
+            return None
     return None
 
 
@@ -387,15 +427,10 @@ def in_scope(title: str) -> str | None:
         return "manager"
     if JUNK_OUT.search(title):
         return "junk"
-    # Dev-leaning integration roles (e.g., "Software Integration Engineer", "Systems Integration Engineer")
-    # that require embedded C/C++, AUTOSAR RTE, CI/CD, ECU bring-up rather than test/validation.
-    # Allow if title also has explicit test/validation/HIL/quality context anywhere in title.
-    if DEV_INTEGRATION.search(title):
-        if not re.search(
-            r"\b(test|validation|verif|v&v|hil|sil|quality)\b.*integration|integration.*\b(test|validation|verif|v&v|hil|sil|quality)\b",
-            title, re.I):
-            return "dev-integration"
-    if DEV_OUT.search(title) and not re.search(r"\b(test|validation|verif|quality|integration)\b", title, re.I):
+    # Exclude all development/design/hardware/manufacturing/process/quality/supplier/calibration/controls roles
+    # even if they have "validation" or "test" in the title (e.g., "Hardware Development and Validation Engineer")
+    # Only allow titles where PRIMARY role is explicitly test/validation/verification/HIL/SIL/MIL
+    if DEV_OUT.search(title):
         return "dev"
     return None
 
@@ -403,21 +438,22 @@ def in_scope(title: str) -> str | None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-days", type=int, default=7)
-    ap.add_argument("--company", help="scan a single company key")
+    ap.add_argument("--company", choices=sorted(BOARDS), help="scan one approved company board")
     ap.add_argument("--probe", action="store_true", help="only report reachable boards")
     ap.add_argument("--verbose", action="store_true", help="show filtered-out fresh roles too")
     args = ap.parse_args()
 
+    if not args.company and not args.probe:
+        ap.error("--company is required for a job scan; use --probe only to check board availability")
+
     today = date.today()
     cutoff = today - timedelta(days=args.max_days)
     keys = [args.company] if args.company else list(BOARDS)
-    any_err = False
     print(f"fresh_scan — {today} (<= {args.max_days}d, US, tester-only)\n")
     for k in keys:
         specs = BOARDS.get(k, []) + BOARD_FIXES.get(k, [])
         if not specs:
-            if args.verbose:
-                print(f"  {k:<14} NO API BOARD KNOWN")
+            print(f"  {k:<14} NO AUTOMATED SCAN ADAPTER — search official career portal directly")
             continue
         jobs = None
         for spec in specs:
@@ -427,8 +463,7 @@ def main() -> int:
                     print(f"  {k:<14} OK via {spec['type']}:{spec.get('token', spec.get('host'))} ({len(jobs)} jobs)")
                 break
         if jobs is None:
-            if args.probe:
-                print(f"  {k:<14} UNREACHABLE ({', '.join(s['type'] for s in specs)})")
+            print(f"  {k:<14} UNREACHABLE ({', '.join(s['type'] for s in specs)})")
             continue
         if args.probe:
             continue
@@ -448,7 +483,7 @@ def main() -> int:
                 reason = in_scope(j["title"])
             if reason and not args.verbose:
                 continue
-            flag = "HIT " if reason is None else f"out({reason})"
+            flag = "CANDIDATE" if reason is None else f"out({reason})"
             hits.append((age, f"    {flag} [{age:>2}d] {j['title'][:78]} | {loc[:40]} | {j['url']}"))
         hits.sort()
         if not hits:

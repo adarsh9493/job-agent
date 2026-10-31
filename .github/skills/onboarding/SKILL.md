@@ -1,6 +1,6 @@
 ---
-name: Onboarding
-description: Ask the user profile and eligibility questions in small batches, read the master resume, and store everything in data/profile. Use on first run or when profile gaps appear.
+name: onboarding
+description: Use on first run or when profile gaps appear. Read the master resume, collect profile and eligibility details in small batches, and store them in data/profile.
 ---
 
 # Onboarding
@@ -22,9 +22,8 @@ only for gaps. Never re-ask something already stored in `data/profile/`.
    - **Work authorization** — US citizen / green card / visa type, expiry, sponsorship now or later.
      Drives eligibility filters: drop "no sponsorship", "US citizens only", and clearance roles when
      ineligible.
-   - **Targets** — titles, seniority, industries. Stay in the user's domain or pivot. Their stated
-     background: automotive validation / embedded, infotainment, HIL/SIL, data engineering. Ask about
-     stretch domains (ADAS, autonomous vehicles, EV, others).
+   - **Targets** — titles, seniority, and automotive companies. Search scope is ADAS/AD validation
+     only; do not broaden to unrelated automotive domains or non-automotive robotics.
    - **Logistics** — locations, remote / hybrid / onsite, relocation, salary floor, notice period,
      start date, exclusions.
    - **Application basics** — legal name, phone, job email, full address, LinkedIn/portfolio,

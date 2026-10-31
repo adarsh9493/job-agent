@@ -1,6 +1,6 @@
 ﻿---
-name: Tailoring
-description: Create an ATS-friendly tailored resume and a specific one-page cover letter from the master resume and a job description, using only real experience.
+name: tailoring
+description: Use when preparing application documents for a specific job. Create an ATS-friendly tailored resume and one-page cover letter from the master resume using only real experience.
 ---
 
 # Tailoring
@@ -13,6 +13,10 @@ description: Create an ATS-friendly tailored resume and a specific one-page cove
 - The job description (`job-description.md`) and `data/profile/profile.json`.
 - `templates/resume.html`, `templates/cover-letter.html`.
 
+The optional `scripts/gen.py` / `scripts/build_all.py` shortcut uses
+`data/profile/tailoring-content.json` when it exists. That file is local and ignored by Git; a fresh
+setup may not have it. Its absence does not block the agent's normal tailoring workflow above.
+
 ## Steps
 
 1. Extract keywords, required skills, and responsibilities from the JD.
@@ -23,6 +27,9 @@ description: Create an ATS-friendly tailored resume and a specific one-page cove
 4. Follow file hygiene (`AGENTS.md`): write the HTML into the system temp directory, convert to PDF,
    then **delete the HTML and any intermediates**.
 5. Save the PDFs into the job folder using the naming convention.
+
+Only tailor roles that already passed the strict automotive ADAS/AD validation check in
+`AGENTS.md`. The match score does not override role scope or eligibility.
 
 ## Job folder
 
@@ -96,8 +103,8 @@ python skills/tailoring/scripts/match_score.py --jd <job folder>/job-description
 2. **Any score → apply anyway** (user directive 2026-10-14: *"no floor at all — apply to everything
    eligible"*). If it is still under 70% after the passes, state the honest gap in the cover letter
    and the application notes, and apply.
-3. **Nothing is ever skipped for a low score.** The only skips are ineligibility (sponsorship,
-   citizenship, clearance, contract/C2C), a manager title, a duplicate, or an out-of-scope industry.
+3. **Nothing is ever skipped for a low score.** Skip only for ineligibility, a manager title, a
+   duplicate, or an out-of-scope company or role under `AGENTS.md`.
 4. Write the final score into the tracker `Match %` column (L).
 
 **Never invent experience, tools or tenure to move the number** — rule 3 is not overridable.
@@ -109,6 +116,8 @@ python skills/tailoring/scripts/match_score.py --jd <job folder>/job-description
 
 ## Quality checks (mandatory)
 
-- **Verify PDF content after rendering:** for each PDF, extract text and ensure it has >= 200 characters, contains the name Adarsh Ramanujapuram, and contains **no** unresolved template tokens like {{FULL_NAME}}, {{PHONE}}, {{EMAIL}}, {{LOCATION}}, {{LINKEDIN}}, {{PORTFOLIO}}, {{DATE}}, {{HIRING_MANAGER_LINE}}, {{COMPANY}}, {{SALUTATION}}, {{OPENING_PARAGRAPH}}, {{BODY_PARAGRAPH_1}}, {{BODY_PARAGRAPH_2}}, {{CLOSING_PARAGRAPH}}, or {{SUMMARY}}.
+- **Verify PDF content after rendering** with `skills/tailoring/scripts/verify_pdf.py`: the resume must
+  have at least 200 extracted characters and the cover letter at least 100; both must contain the
+  profile's legal name and no unresolved `{{...}}` tokens.
 - If verification fails, **do not apply**. Regenerate the HTML properly (fill real data from profile/master), re-render, and re-verify before uploading.
 - Delete any HTML/intermediates only after verification passes.

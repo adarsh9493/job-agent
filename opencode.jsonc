@@ -1,7 +1,0 @@
-{
-  // OpenCode V2 project configuration.
-  // Registers the project's skills so OpenCode discovers skills/<id>/SKILL.md.
-  // See https://opencode.ai/v2/docs/skills and https://opencode.ai/v2/docs/config
-  "$schema": "https://opencode.ai/config.json",
-  "skills": ["./skills"]
-}

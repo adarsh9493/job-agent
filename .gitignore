@@ -35,6 +35,8 @@ ENV/
 
 # IDE and editor
 .vscode/
+!.vscode/
+!.vscode/mcp.json
 .idea/
 *.swp
 *.swo
@@ -56,6 +58,7 @@ tmp/
 
 # Test and debug scripts (local development)
 test_*.py
+!tests/test_workflow_contract.py
 fix_*.py
 check_*.py
 fetch_*.py

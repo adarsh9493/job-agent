@@ -1,6 +1,6 @@
 ﻿---
-name: Application Fill
-description: Fill and submit job application forms in a visible browser - upload documents first, reuse the answers bank, handle CAPTCHAs, and never guess on required or legal fields.
+name: application-fill
+description: Use when completing job applications in a visible browser. Submit autonomously after two-pass review, attach required and supported documents, reuse the answers bank, handle CAPTCHAs, and never guess on legal eligibility.
 ---
 
 # Application Fill
@@ -17,25 +17,29 @@ description: Fill and submit job application forms in a visible browser - upload
 
 ## Steps
 
-1. **Upload the tailored resume and cover letter first**, then fill the rest from the profile and
-   answers bank.
-2. **First application ever (test run):** go **field by field**, ask the user **every** question the
-   form raises, save all answers to the answers bank, and **WAIT for approval before submitting**.
-3. **Later applications:** reuse the answers bank. On a **new question**, ask the user, save it, and
-   reuse it next time.
-4. **Never guess** on required fields.
-5. **CAPTCHA:** stop, tell the user, let them solve it and submit, then continue with the next job.
-   If no approved fallback exists, mark the job **"Manual Application Submission Needed"** (after
-   finishing the tailored resume and cover letter) and move on. If the user applies to a job
-   manually, they drop the confirmation screenshot into that job folder in `current/` (any image
-   or a file named with confirm/applied/success); the archive hook moves it to `history/` exactly like an agent submit.
-6. Save a **confirmation screenshot** in the job folder, then **archive the job folder** — run `python skills/documentation.py`, which moves every applied folder in `data/applications/current/` (one holding a confirmation screenshot — `confirmation_screenshot.png`, any image, or a file named with confirm/applied/success) into `data/applications/history/`.
-7. Hand off to the tracker skill. Wait **30–90 s** before the next application.
-
-## Rules
+1. Fill from `profile.json` and `answers-bank.json`; use each portal’s verified upload order and
+   confirm the visible attachment filenames. Always attach the resume. Attach the cover letter
+   when the portal provides or requires an upload field; a portal with no cover-letter field is not
+   by itself a reason to stop or withhold submission.
+2. Use one browser page at a time (`AGENTS.md` rule 12). Reuse the authenticated portal session
+   when it remains valid; navigate the same page rather than opening a new tab for another company
+   or job. Reuse known answers and save each newly learned non-legal answer to the answers bank
+   immediately; do not re-read unrelated profile or portal content.
+3. Submit autonomously after both review passes whenever all hard rules are satisfied; do not seek
+   per-application approval.
+4. Never guess on a required field. Legal/eligibility unknowns are logged to
+   `data/profile/legal-blockers.json`; stop the current application and continue to the next one.
+5. If a CAPTCHA appears, pause for the user to solve it, then resume the normal reviewed flow. If
+   the portal remains unsupported or cannot be completed safely, save an incomplete/manual-needed
+   status and continue. Never bypass a CAPTCHA.
+6. Apply the same submit review to every portal. Submit only after both pre-submit review passes
+   in this skill and the applicable PDF checks pass.
+7. Save the confirmation screenshot in the job folder, run `python skills/documentation.py` once,
+   and update the tracker before moving to the next role. Then close the finished browser page when
+   supported; otherwise reuse it for the next role and report if it cannot be closed at stop.
 
 - Clear the cookie/consent banner before filling anything (`AGENTS.md` rule 8).
-- **Never submit** if a legal/eligibility answer is unknown — ask (`AGENTS.md` rule 4).
+- **Never submit** if a legal/eligibility answer is unknown — **pause the current application, inform the user, log the blocker to `data/profile/legal-blockers.json`, and immediately continue to the next application** (`AGENTS.md` rule 4). Do not wait for a response.
 - **Never store** SSN, government ID numbers, bank or card numbers; pause for manual entry
   (`AGENTS.md` rule 5).
 - Never fall back to LinkedIn / Indeed / Glassdoor without the explicit exception approval
@@ -61,9 +65,9 @@ description: Fill and submit job application forms in a visible browser - upload
   text** in the upload area instead.
 - **EEO "mark all that apply" questions are multi-selects** (chips). Verify option texts, click
   the exact option, close with Escape.
-- **Supervised test run (apps #1–#2):** explicit user approval right before Submit — fill,
-  screenshot, present a field-by-field review, wait for "go". **From application #3 on the agent
-  submits on its own after the mandatory 2-pass review below.**
+- **Autonomous submission:** the user retired the former app #1–#2 approval gate on 2026-10-28.
+  Complete both review passes below and submit without asking for per-application approval when all
+  hard rules are satisfied.
 
 ### Ashby (Applied Intuition and similar) — lessons 2026-10-12
 
@@ -101,7 +105,7 @@ description: Fill and submit job application forms in a visible browser - upload
 - **Phone Country is required and starts empty even though a flag is shown.** Appearing to have a
   default, the field's value is actually unset; Submit fails with a `Select a country` validation
   and *does not submit*. Always open the Country combobox and pick **"United States +1"** before
-  submitting. (The phone number then reformats to `(714) 728-9684`.)
+  submitting. (The phone number then reformats to `a formatted international number`.)
 - Success is NOT the plain Greenhouse page. It renders **"Thank you for applying." / "Your
   application has been received. If there is a fit, someone will be getting back to you."** — confirm
   by that text. The confirmation email is `no-reply@lucidmotors.com`, subject "Thank you for
@@ -113,10 +117,35 @@ description: Fill and submit job application forms in a visible browser - upload
 - After `Are you Hispanic/Latino? = No`, a conditional **"Please identify your race"** select appears
   (not marked required) — answer **Asian** for consistency with profile EEO.
 
-## Pre-submit 2-pass review (mandatory — self-submit from application #3)
+### Workday (`<tenant>.wdX.myworkdayjobs.com`)
 
-Run BOTH passes on every application before clicking Submit. Abort and ask the user if either
-pass fails; never submit a flagged form.
+Use the visible browser flow and the checks below. Do not run a separate Workday submission script.
+
+- A valid session may redirect to candidate home a few seconds **after** the login form paints;
+  wait for the page to settle before filling anything.
+  A *fresh* login can still prepend a 6th `Create Account/Sign In` step; sign in with the existing
+  account (never `verifyPassword`, never create a second account).
+- The application commonly has My Information, My Experience, Application Questions, Voluntary
+  Disclosures, and Review steps. A saved draft may resume at a later step.
+- Native radios and checkboxes may be visually hidden behind styled wrappers. Verify the selected
+  visible option and the saved value; never infer a selection from DOM presence alone.
+- An **empty combobox is aria-labelled "Select One Required"** — that string is useless as a
+  question key. Read the question from the enclosing `[data-automation-id^="formField"]` →
+  `[data-automation-id="formFieldLabel"]` instead.
+- Dates may use month/year spinbuttons rather than text inputs. Read the displayed value after
+  entry and confirm it is committed before proceeding.
+- **The LinkedIn field rejects `https://linkedin.com/...`** — it only validates the canonical
+  `https://www.linkedin.com/in/<slug>` form.
+- Workday keeps an uploaded resume across steps and re-toasts "successfully uploaded" — check the
+  body text before uploading so the same PDF is not attached twice.
+- If an answer cannot be matched confidently to the profile or answers bank, stop rather than
+  guessing. Save confirmation evidence in the job folder only after the portal confirms submission.
+
+## Pre-submit 2-pass review (mandatory — autonomous submission)
+
+Run BOTH passes on every application before clicking Submit. Never submit a flagged form. Log
+legal/eligibility blockers and continue to the next role; resolve other form gaps from known profile
+data or save the application for manual follow-up.
 
 **Pass 1 — Truth & eligibility**
 1. No invented facts: every work/education/skill claim in the form matches `profile.json` and the
@@ -136,8 +165,10 @@ pass fails; never submit a flagged form.
    paraphrases like "Prefer not to say".
 6. Expected compensation is within the stated range.
 7. Education shows **CSU Fullerton (2017) + JNTU (2014) only — never Trine University**.
-8. Resume + cover letter attached — verify via the **visible attachment filename text**, not
-   `.files.length` (Greenhouse replaces the input element).
+8. Resume attached — verify via the **visible attachment filename text**, not `.files.length`
+   (Greenhouse replaces the input element). Attach and verify the cover letter if the portal
+   provides or requires a cover-letter field. If no such field exists, proceed without it and record
+   that limitation in the tracker; do not treat an unavailable optional upload as a failed review.
 9. EEO answers follow the profile's approved set (or "I don't wish to answer") — nothing invented.
 10. If a visible reCAPTCHA challenge appears, stop and hand it to the user.
 
@@ -150,8 +181,13 @@ Enter), wait for the confirmation page, save `confirmation_screenshot.png`, arch
 
 ## Pre-upload verification (mandatory)
 
-- Before uploading any resume/cover letter PDF, **extract and verify its text**:
-  - Resume PDF: >= 200 chars, contains Adarsh Ramanujapuram, and contains **no** tokens {{FULL_NAME}}, {{PHONE}}, {{EMAIL}}, {{LOCATION}}, {{LINKEDIN}}, {{PORTFOLIO}}, {{SUMMARY}}, or any {{...}} placeholder.
-  - Cover letter PDF: >= 100 chars, contains Adarsh Ramanujapuram, and contains **no** tokens {{...}}.
-- If verification fails, **abort the application (do not upload or submit)**, regenerate the PDFs properly from filled HTML, re-verify, then proceed.
-- After upload, also verify the **visible attachment filename text** is present.
+- Before uploading a resume or cover-letter PDF, **extract and verify its text**:
+  - Resume PDF: >= 200 chars, contains the profile's legal name, and contains no `{{...}}`
+    placeholder.
+  - Cover letter PDF, when the portal supports or requires the upload: >= 100 chars, contains the
+    profile's legal name, and contains no `{{...}}` placeholder.
+- If a document that the portal requires fails verification, **do not submit**; regenerate it
+  properly from filled HTML, re-verify, then proceed. A cover letter that cannot be uploaded because
+  the portal has no cover-letter field does not block submission.
+- After upload, also verify the **visible attachment filename text** is present for every uploaded
+  document.
