@@ -1,10 +1,10 @@
 # Job Agent
 
 An autonomous job-application agent. All personal and generated data lives in `data/`
-(gitignored). Workflow instructions live in `.github/skills/`; helper logic lives in `skills/` and
+(gitignored). Workflow instructions live in `agent/skills/`; helper logic lives in `scripts/` and
 `templates/`.
 
-Read this file first. Then load the matching skill with the `skill` tool before doing a task.
+Read this file first. Then load the matching skill before doing a task.
 Do not duplicate rules across files — reference this one.
 
 ## Hard rules (never override)
@@ -13,7 +13,7 @@ Do not duplicate rules across files — reference this one.
    SmartRecruiters, company sites). Never LinkedIn / Indeed / Glassdoor.
    Exception: if a CAPTCHA blocks the portal **and** an Easy Apply exists for the **same**
    role, ask the user first and wait for approval.
-2. **Gmail.** Use the user's existing job email. Only search/read verification links, OTPs, and
+2. **Mail.** Use the user's existing job email. Only search/read verification links, OTPs, and
    application confirmations/rejections from portals in use. Use narrow queries
    (sender domain + recent timestamp). Never open, summarize, or quote any other email.
 3. **Never invent facts** on a resume, cover letter, or application. Tailor only by reordering,
@@ -48,7 +48,7 @@ Do not duplicate rules across files — reference this one.
    profile. Attach the cover letter when the portal provides or requires an upload field; if it
    does not, that alone is not a reason to block submission. Record the portal limitation in the
    tracker. Only then click Submit. The full checklist lives in
-   `.github/skills/application-fill/SKILL.md`.
+   `agent/skills/application-fill/SKILL.md`.
 10. **Write like a human.** Every free-text answer (application questions, "what draws you to this
     role", cover letters, recruiter messages) must read like the user talking — natural, specific,
     plain-spoken. No resume-speak, no buzzword stacking, no templated filler. Use only real
@@ -77,7 +77,7 @@ Do not duplicate rules across files — reference this one.
 - Each job folder `data/applications/<Company>_<Title>_<JobID>_<YYYY-MM-DD>/` keeps only:
   resume PDF, cover-letter PDF, `job-description.md`, and the confirmation screenshot
   (keep DOCX only if a portal requires it).
-- **After a successful submit**, run `python skills/documentation.py` once to move confirmed job
+- **After a successful submit**, run `python scripts/runtime/archive.py` once to move confirmed job
   folders from `data/applications/current/` to `data/applications/history/`. A folder counts as
   applied when it holds `confirmation_screenshot.png`, any image file, or a file named with
   `confirm` / `applied` / `success`. Run the same command at stop to catch manually applied folders.
@@ -125,7 +125,7 @@ Do not duplicate rules across files — reference this one.
 - **Match score: NO FLOOR — freshness + eligibility are the only gates (user directive 2026-10-14).**
   The score is a *quality signal and a tailoring to-do list*, never a reason to skip a role. Score =
   65% technical-vocabulary overlap + 35% general keyword overlap, computed on the exact resume PDF
-  that gets submitted. Use `skills/tailoring/scripts/match_score.py` (single folder, or
+  that gets submitted. Use `scripts/tailoring/match_score.py` (single folder, or
   `--jd X --resume Y`); it also prints the JD terms the resume is missing — that list is the
   tailoring to-do list.
   - Still **aim for ≥70%** on every tailored resume: render → score → if under 70%, run another pass
@@ -173,7 +173,7 @@ Do not duplicate rules across files — reference this one.
   focus — if the role is generic software QA that could apply to anything, it is OUT. This
   is the only domain scope. Sweep rounds every session and apply immediately when an in-scope role
   is found.
-- **Gmail watch (user directive 2026-10-14): keep the tracker current in near-real time.** Check the
+- **Mail watch (user directive 2026-10-14): keep the tracker current in near-real time.** Check the
   job inbox with narrow queries (portal sender domain + `since`) at session start, after every
   single application, after every burst, and at least every ~15–20 min while the session is
   running. Fold any Interview / Offer / Rejected straight into the tracker `Status` (and the Notes)

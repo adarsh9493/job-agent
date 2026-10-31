@@ -1,4 +1,5 @@
 ---
+# GENERATED - do not edit. Source: agent/skills/company-research/SKILL.md
 name: company-research
 description: Use when researching or updating the approved company list. Verify automotive business fit, ADAS/AD validation relevance, and official career portals.
 ---

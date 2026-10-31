@@ -1,3 +1,8 @@
+"""Workflow contract tests.
+
+These tests are the guard rails for G1 (the flow never breaks when something changes) and
+G4 (works with any harness). They run on fixtures only - never on real data/.
+"""
 import contextlib
 import io
 import json
@@ -12,172 +17,162 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "job-search" / "scripts"))
-sys.path.insert(0, str(ROOT / "skills" / "tailoring" / "scripts"))
-sys.path.insert(0, str(ROOT / "skills"))
+for sub in ("scan", "runtime", "tailoring", "maintenance"):
+    sys.path.insert(0, str(ROOT / "scripts" / sub))
 
-import documentation
+import archive
+import checkpoint
 import fresh_scan
 import gen
-import session_checkpoint
 import sweep
 import verify_pdf
 
+SKILL_NAMES = {
+    "application-fill",
+    "company-research",
+    "job-search",
+    "onboarding",
+    "portal-login",
+    "session-control",
+    "tailoring",
+    "tracker",
+}
 
-class WorkflowContractTests(unittest.TestCase):
-    def test_copilot_skills_use_discoverable_paths_and_matching_names(self):
-        skills_root = ROOT / ".github" / "skills"
-        expected = {
-            "application-fill",
-            "company-research",
-            "job-search",
-            "onboarding",
-            "portal-login",
-            "session-control",
-            "tailoring",
-            "tracker",
-        }
+# Root allowlist: anything else at the top level fails the build (G5).
+ALLOWED_ROOT_FILES = {
+    ".gitignore",
+    ".mcp.json",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "PREREQUISITES.md",
+    "README.md",
+    "SETUP.md",
+    "opencode.jsonc",
+    "requirements.txt",
+}
+ALLOWED_ROOT_DIRS = {
+    ".claude",
+    ".git",
+    ".github",
+    ".venv",
+    ".vscode",
+    "agent",
+    "data",
+    "scripts",
+    "templates",
+    "tests",
+}
+
+# Harness and tool names that must never appear in canonical instructions.
+HARNESS_NAMES = re.compile(
+    r"copilot|vs code|vscode|claude|opencode|codex|gemini|chatgpt"
+    r"|playwright|gmail|mcpmails|\bmcp\b",
+    re.IGNORECASE,
+)
+
+
+def canonical_files():
+    yield ROOT / "AGENTS.md"
+    yield from sorted((ROOT / "agent" / "skills").rglob("*.md"))
+
+
+def read(path):
+    return path.read_text(encoding="utf-8")
+
+
+class LayoutTests(unittest.TestCase):
+    def test_root_contains_only_allowlisted_entries(self):
+        found_files = set()
+        found_dirs = set()
+        for entry in ROOT.iterdir():
+            (found_dirs if entry.is_dir() else found_files).add(entry.name)
+
+        self.assertEqual(found_files - ALLOWED_ROOT_FILES, set(), "unexpected root file")
+        self.assertEqual(found_dirs - ALLOWED_ROOT_DIRS, set(), "unexpected root folder")
+
+    def test_canonical_skills_have_matching_names(self):
         skills = {
             path.name: path / "SKILL.md"
-            for path in skills_root.iterdir()
+            for path in (ROOT / "agent" / "skills").iterdir()
             if path.is_dir()
         }
-        self.assertEqual(set(skills), expected)
+        self.assertEqual(set(skills), SKILL_NAMES)
 
         for folder_name, skill_file in skills.items():
-            contents = skill_file.read_text(encoding="utf-8")
+            contents = read(skill_file)
             match = re.search(r"^name:\s*([a-z0-9-]+)\s*$", contents, re.MULTILINE)
             self.assertIsNotNone(match, f"{skill_file} has no valid skill name")
             self.assertEqual(match.group(1), folder_name)
 
-    def test_workflow_skills_have_one_instruction_source(self):
-        helper_root = ROOT / "skills"
-        self.assertEqual(list(helper_root.rglob("SKILL.md")), [])
-        self.assertTrue((helper_root / "session_checkpoint.py").is_file())
-        self.assertTrue((helper_root / "documentation.py").is_file())
+    def test_one_instruction_source(self):
+        """SKILL.md lives only under agent/skills; agent/ holds no Python."""
+        ignored = {".venv", ".git", "data"}
+        stray = [
+            p for p in ROOT.rglob("SKILL.md")
+            if not ignored & set(p.relative_to(ROOT).parts)
+            and not {"agent", ".claude", ".github"} & set(p.relative_to(ROOT).parts)
+        ]
+        self.assertEqual(stray, [])
+        self.assertEqual(list((ROOT / "agent").rglob("*.py")), [])
+        self.assertEqual(list(ROOT.glob("skills")), [])
+        self.assertEqual(list(ROOT.glob("docs")), [])
 
-    def test_session_control_documents_restart_safe_start_and_stop_checkpoints(self):
-        skill_file = ROOT / ".github" / "skills" / "session-control" / "SKILL.md"
-        contents = skill_file.read_text(encoding="utf-8").lower()
-        start, stop = contents.split("## stop", maxsplit=1)
 
-        for requirement in (
-            "validate",
-            "state.json",
-            "tracker",
-            "legal blockers",
-            "sweep cursor",
-            "reconcile",
-        ):
-            self.assertIn(requirement, start)
-        for requirement in (
-            "exact company/job/form step",
-            "remaining queue",
-            "session counters",
-            "mode",
-            "last_stop_at",
-            "validate --expected-mode stopped",
-        ):
-            self.assertIn(requirement, stop)
-        self.assertIn("checkpoint is valid and readable", start)
-
-    def test_checkpoint_validator_checks_cursor_and_session_counters(self):
-        checkpoint = {
-            "mode": "running",
-            "queue": [],
-            "current": {},
-            "search_cursor": {"company": "Stellantis", "index": 18},
-            "sweep": {"cursor": "Stellantis"},
-            "applications_this_session": 1,
-            "session_stats": {
-                "applied": 1,
-                "failed": 0,
-                "manual_needed": 1,
-                "queued": 0,
-                "skipped": 31,
-                "submitted": 1,
-            },
-        }
-        self.assertEqual(session_checkpoint.validate_state(checkpoint), [])
-        self.assertEqual(
-            session_checkpoint.validate_state(checkpoint, expected_mode="stopped"),
-            ["mode is 'running'; expected 'stopped'"],
+class AdapterTests(unittest.TestCase):
+    def test_adapters_match_canonical(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "maintenance" / "sync_adapters.py"),
+             "--check"],
+            cwd=ROOT, capture_output=True, text=True, check=False,
         )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
-        checkpoint["sweep"]["cursor"] = "Different Company"
-        checkpoint["session_stats"]["submitted"] = -1
-        errors = session_checkpoint.validate_state(checkpoint)
-        self.assertIn("search_cursor.company and sweep.cursor must match", errors)
-        self.assertIn(
-            "session_stats.submitted must be a non-negative integer", errors
-        )
-
-    def test_checkpoint_mode_transition_is_atomic_and_sets_timestamp(self):
-        checkpoint = {
-            "mode": "running",
-            "queue": [],
-            "current": {},
-            "search_cursor": {"company": "Stellantis", "index": 18},
-            "sweep": {"cursor": "Stellantis"},
-            "applications_this_session": 1,
-            "session_stats": {
-                "applied": 1,
-                "failed": 0,
-                "manual_needed": 1,
-                "queued": 0,
-                "skipped": 31,
-                "submitted": 1,
-            },
+    def test_every_mcp_config_contains_pinned_playwright(self):
+        configs = {
+            ".vscode/mcp.json": ("servers",),
+            ".mcp.json": ("mcpServers",),
+            "opencode.jsonc": ("mcp", "servers"),
         }
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "state.json"
-            path.write_text(json.dumps(checkpoint), encoding="utf-8")
-
-            stopped = session_checkpoint.set_mode(path, "stopped")
-
-            self.assertEqual(stopped["mode"], "stopped")
-            self.assertTrue(stopped["last_stop_at"])
-            self.assertEqual(
-                session_checkpoint.validate_state(
-                    session_checkpoint.read_state(path), expected_mode="stopped"
-                ),
-                [],
+        for rel, keys in configs.items():
+            data = json.loads(read(ROOT / rel))
+            for key in keys:
+                data = data[key]
+            self.assertIn("playwright", data, rel)
+            entry = data["playwright"]
+            args = entry.get("args", entry.get("command", [])[1:])
+            self.assertIn("-y", args)
+            self.assertTrue(
+                any(arg.startswith("@playwright/mcp@") for arg in args), rel
             )
-            self.assertEqual(list(Path(temp_dir).glob("*.tmp")), [])
+            self.assertFalse(any("@latest" in arg for arg in args), rel)
 
-    def test_checkpoint_initialization_supports_first_run_without_overwrite(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "new" / "state.json"
+    def test_canonical_files_name_no_harness_or_tool(self):
+        for path in canonical_files():
+            hits = HARNESS_NAMES.findall(read(path))
+            self.assertEqual(hits, [], f"{path.relative_to(ROOT)} names a harness/tool: {hits}")
 
-            state = session_checkpoint.initialize_state(path)
 
-            self.assertEqual(state["mode"], "stopped")
-            self.assertEqual(state["queue"], [])
-            self.assertEqual(state["search_cursor"]["company"], "")
-            self.assertEqual(session_checkpoint.validate_state(state), [])
-            with self.assertRaisesRegex(FileExistsError, "already exists"):
-                session_checkpoint.initialize_state(path)
-
+class PolicyTests(unittest.TestCase):
     def test_application_submission_policy_matches_user_directives(self):
-        agent_rules = (ROOT / "AGENTS.md").read_text(encoding="utf-8").lower()
-        application_skill = (
-            ROOT / ".github" / "skills" / "application-fill" / "SKILL.md"
-        ).read_text(encoding="utf-8").lower()
+        agent_rules = read(ROOT / "AGENTS.md").lower()
+        application_skill = read(
+            ROOT / "agent" / "skills" / "application-fill" / "SKILL.md"
+        ).lower()
 
         self.assertIn("the agent submits **on its own**", agent_rules)
         self.assertIn("apply when the posting is silent", agent_rules)
         self.assertIn("does not block submission", application_skill)
 
     def test_browser_workflow_requires_one_page_and_explicit_close_handling(self):
-        agent_rules = " ".join(
-            (ROOT / "AGENTS.md").read_text(encoding="utf-8").lower().split()
-        )
-        session_skill = (
-            ROOT / ".github" / "skills" / "session-control" / "SKILL.md"
-        ).read_text(encoding="utf-8").lower()
-        application_skill = (
-            ROOT / ".github" / "skills" / "application-fill" / "SKILL.md"
-        ).read_text(encoding="utf-8").lower()
+        agent_rules = " ".join(read(ROOT / "AGENTS.md").lower().split())
+        session_skill = read(
+            ROOT / "agent" / "skills" / "session-control" / "SKILL.md"
+        ).lower()
+        application_skill = read(
+            ROOT / "agent" / "skills" / "application-fill" / "SKILL.md"
+        ).lower()
 
         self.assertIn("use one browser page at a time", agent_rules)
         self.assertIn("do not open parallel tabs/pages", agent_rules)
@@ -185,37 +180,107 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("close the remaining browser page", session_skill)
         self.assertIn("navigate the same page", application_skill)
 
-    def test_vscode_mcp_configures_playwright(self):
-        config_path = ROOT / ".vscode" / "mcp.json"
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-        self.assertEqual(config["servers"]["playwright"]["type"], "stdio")
-        self.assertEqual(config["servers"]["playwright"]["command"], "npx")
-        self.assertEqual(
-            config["servers"]["playwright"]["args"],
-            ["-y", "@playwright/mcp@latest"],
-        )
-        self.assertFalse((ROOT / "opencode.jsonc").exists())
+    def test_session_control_documents_restart_safe_start_and_stop_checkpoints(self):
+        contents = read(ROOT / "agent" / "skills" / "session-control" / "SKILL.md").lower()
+        start, stop = contents.split("## stop", maxsplit=1)
 
-    def test_scanner_keeps_senior_individual_contributors_and_rejects_managers(self):
+        for requirement in ("validate", "state.json", "tracker", "legal blockers",
+                            "sweep cursor", "reconcile"):
+            self.assertIn(requirement, start)
+        for requirement in ("exact company/job/form step", "remaining queue",
+                            "session counters", "mode", "last_stop_at",
+                            "validate --expected-mode stopped"):
+            self.assertIn(requirement, stop)
+        self.assertIn("checkpoint is valid and readable", start)
+
+
+class CheckpointTests(unittest.TestCase):
+    CHECKPOINT = {
+        "mode": "running",
+        "queue": [],
+        "current": {},
+        "search_cursor": {"company": "Stellantis", "index": 18},
+        "sweep": {"cursor": "Stellantis"},
+        "applications_this_session": 1,
+        "session_stats": {"applied": 1, "failed": 0, "manual_needed": 1,
+                          "queued": 0, "skipped": 31, "submitted": 1},
+    }
+
+    def test_validator_checks_cursor_and_session_counters(self):
+        state = json.loads(json.dumps(self.CHECKPOINT))
+        self.assertEqual(checkpoint.validate_state(state), [])
+        self.assertEqual(
+            checkpoint.validate_state(state, expected_mode="stopped"),
+            ["mode is 'running'; expected 'stopped'"],
+        )
+
+        state["sweep"]["cursor"] = "Different Company"
+        state["session_stats"]["submitted"] = -1
+        errors = checkpoint.validate_state(state)
+        self.assertIn("search_cursor.company and sweep.cursor must match", errors)
+        self.assertIn("session_stats.submitted must be a non-negative integer", errors)
+
+    def test_mode_transition_is_atomic_and_sets_timestamp(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "state.json"
+            path.write_text(json.dumps(self.CHECKPOINT), encoding="utf-8")
+
+            stopped = checkpoint.set_mode(path, "stopped")
+
+            self.assertEqual(stopped["mode"], "stopped")
+            self.assertTrue(stopped["last_stop_at"])
+            self.assertEqual(
+                checkpoint.validate_state(
+                    checkpoint.read_state(path), expected_mode="stopped"
+                ),
+                [],
+            )
+            self.assertEqual(list(Path(temp_dir).glob("*.tmp")), [])
+
+    def test_initialization_supports_first_run_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "new" / "state.json"
+
+            state = checkpoint.initialize_state(path)
+
+            self.assertEqual(state["mode"], "stopped")
+            self.assertEqual(state["queue"], [])
+            self.assertEqual(state["search_cursor"]["company"], "")
+            self.assertEqual(checkpoint.validate_state(state), [])
+            with self.assertRaisesRegex(FileExistsError, "already exists"):
+                checkpoint.initialize_state(path)
+
+
+class ScannerTests(unittest.TestCase):
+    def test_keeps_senior_individual_contributors_and_rejects_managers(self):
         self.assertIsNone(fresh_scan.in_scope("Senior ADAS Validation Engineer"))
         self.assertEqual(fresh_scan.in_scope("ADAS Validation Manager"), "manager")
 
-    def test_scanner_rejects_product_software_engineering(self):
+    def test_rejects_product_software_engineering(self):
         self.assertIsNotNone(fresh_scan.in_scope("Software Engineer"))
         self.assertIsNone(fresh_scan.in_scope("Software Validation Engineer"))
 
-    def test_scanner_requires_one_company_outside_probe_mode(self):
+    def test_requires_one_company_outside_probe_mode(self):
         result = subprocess.run(
-            [sys.executable, str(ROOT / "skills" / "job-search" / "scripts" /
-                                 "fresh_scan.py")],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
+            [sys.executable, str(ROOT / "scripts" / "scan" / "fresh_scan.py")],
+            cwd=ROOT, capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("--company is required", result.stderr)
 
+    def test_successfactors_rss_feed_normalizes_title_location_and_date(self):
+        feed = (ROOT / "tests" / "fixtures" / "successfactors_feed.xml").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(fresh_scan.parse_successfactors_rss(feed), [{
+            "title": "ADAS Validation Engineer",
+            "location": "Detroit, MI",
+            "posted": "2026-10-26",
+            "url": "https://jobs.example.com/role/123",
+        }])
+
+
+class SweepTests(unittest.TestCase):
     def test_recent_application_does_not_add_a_company_cooldown(self):
         with patch.object(sweep, "last_applied", return_value={"lucid": date(2026, 10, 25)}):
             with patch.object(sweep, "applied_keys", return_value={"lucid"}):
@@ -224,11 +289,11 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertFalse(result["interview_blocked"])
         self.assertEqual(result["days"], 1)
 
-    def test_sweep_contains_only_companies_from_the_approved_list(self):
+    def test_contains_only_companies_from_the_approved_list(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             companies_file = Path(temp_dir) / "companies.md"
             companies_file.write_text(
-                "| # | Company |\n|---|---|\n| 1 | Target Automotive |\n",
+                (ROOT / "tests" / "fixtures" / "companies.md").read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
             with patch.object(sweep, "last_applied", return_value={
@@ -246,7 +311,7 @@ class WorkflowContractTests(unittest.TestCase):
                 )
         self.assertEqual([entry["company"] for entry in entries], ["Target Automotive"])
 
-    def test_sweep_keeps_ford_distinct_from_torc_and_honors_its_cursor(self):
+    def test_keeps_ford_distinct_from_torc_and_honors_its_cursor(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             companies_file = Path(temp_dir) / "companies.md"
             companies_file.write_text(
@@ -270,20 +335,8 @@ class WorkflowContractTests(unittest.TestCase):
             ["Ford Motor Company", "Torc Robotics"],
         )
 
-    def test_successfactors_rss_feed_normalizes_title_location_and_date(self):
-        feed = """<?xml version="1.0"?>
-        <rss><channel><item>
-          <title><![CDATA[ADAS Validation Engineer (Detroit, MI)]]></title>
-          <link>https://jobs.example.com/role/123?source=rss</link>
-          <pubDate>Mon, 26 Oct 2026 12:00:00 GMT</pubDate>
-        </item></channel></rss>"""
-        self.assertEqual(fresh_scan.parse_successfactors_rss(feed), [{
-            "title": "ADAS Validation Engineer",
-            "location": "Detroit, MI",
-            "posted": "2026-10-26",
-            "url": "https://jobs.example.com/role/123",
-        }])
 
+class TailoringTests(unittest.TestCase):
     def test_pdf_verification_enforces_length_name_and_token_checks(self):
         valid, errors = verify_pdf.verify_text("A" * 200 + " Jane Doe", "Jane Doe", 200)
         self.assertTrue(valid)
@@ -295,8 +348,7 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_missing_local_tailoring_data_is_safe_for_fresh_setups(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            missing_path = Path(temp_dir) / "missing.json"
-            with patch.object(gen, "TAILORING_DATA_PATH", missing_path):
+            with patch.object(gen, "TAILORING_DATA_PATH", Path(temp_dir) / "missing.json"):
                 self.assertEqual(
                     gen.load_tailoring_data(),
                     {"PROJECTS": {}, "EXPERIENCE": "", "EDUCATION": "", "JOBS": {}},
@@ -312,7 +364,7 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_build_all_explains_when_no_local_configs_exist(self):
         stderr = io.StringIO()
-        build_script = ROOT / "skills" / "tailoring" / "scripts" / "build_all.py"
+        build_script = ROOT / "scripts" / "tailoring" / "build_all.py"
         with patch.object(gen, "JOBS", {}), patch.object(sys, "argv", [str(build_script)]):
             with contextlib.redirect_stderr(stderr):
                 with self.assertRaises(SystemExit) as result:
@@ -320,7 +372,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(result.exception.code, 2)
         self.assertIn("No local tailoring configurations", stderr.getvalue())
 
-    def test_archive_moves_only_folders_with_confirmation_evidence(self):
+
+class ArchiveTests(unittest.TestCase):
+    def test_moves_only_folders_with_confirmation_evidence(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             current = Path(temp_dir) / "current"
             history = Path(temp_dir) / "history"
@@ -330,7 +384,7 @@ class WorkflowContractTests(unittest.TestCase):
             queued.mkdir()
             (applied / "confirmation_screenshot.png").touch()
 
-            results = documentation.archive_applied_folders(str(current), str(history))
+            results = archive.archive_applied_folders(str(current), str(history))
 
             self.assertIn(("Applied", "moved", "confirmation_screenshot.png"), results)
             self.assertIn(("Queued", "left", ""), results)

@@ -14,7 +14,7 @@ except ImportError:
     from PyPDF2 import PdfReader
     from PyPDF2.errors import PdfReadError
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = PROJECT_ROOT / "data" / "profile" / "profile.json"
 
 

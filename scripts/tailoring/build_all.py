@@ -7,7 +7,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import gen  # noqa: E402  (sibling module: skills/tailoring/scripts/gen.py)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APPS = PROJECT_ROOT / "data" / "applications" / "current"
 
 RENDER = os.path.join(HERE, "render_pdf.py")

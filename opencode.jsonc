@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "$comment": "GENERATED - do not edit. Source: agent/mcp.json + agent/skills/",
+  "skills": [
+    "./agent/skills"
+  ],
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "@playwright/mcp@0.0.84"
+        ]
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 ---
+# GENERATED - do not edit. Source: agent/skills/session-control/SKILL.md
 name: session-control
 description: Use when the user says start, stop, resume, or I found a job. Control the supported job-application workflow using persisted state.
 ---
@@ -11,15 +12,15 @@ machine.
 ## Start
 
 1. If `data/state/state.json` does not exist, run
-   `python skills/session_checkpoint.py init`. Otherwise run
-   `python skills/session_checkpoint.py validate`; do not proceed with malformed state.
+   `python scripts/runtime/checkpoint.py init`. Otherwise run
+   `python scripts/runtime/checkpoint.py validate`; do not proceed with malformed state.
 2. Read the tracker, pending legal blockers, approved company list, application-folder evidence, and
    rotating sweep cursor. Complete onboarding when needed. Reconcile conflicts and initialize both
    cursor fields from the approved list before setting a non-empty cursor. Then run
-   `python skills/session_checkpoint.py set-mode running`.
+   `python scripts/runtime/checkpoint.py set-mode running`.
 3. Before browser work, keep to one visible browser page; reuse it sequentially and close any
    finished page when the available browser controls support closure (`AGENTS.md` rule 12).
-4. Check for new application responses using narrow Gmail queries as described in `AGENTS.md`.
+4. Check for new application responses using narrow mail queries as described in `AGENTS.md`.
 5. Re-grade current job folders against the strict ADAS/AD validation rule and safely remove only
    out-of-scope generated drafts.
 6. Run the company round-robin in `companies.md` order. Use `fresh_scan.py` as the only automated
@@ -30,15 +31,15 @@ machine.
    incomplete status and resume at the next company.
 8. After each application or safely skipped role, persist its tracker status, queue, cursor, current
    company/job/step, and session counters before proceeding. Run
-   `python skills/session_checkpoint.py validate --expected-mode running`; never begin another
+   `python scripts/runtime/checkpoint.py validate --expected-mode running`; never begin another
    application until the checkpoint is valid and readable.
 
 ## Stop
 
 Finish or safely abort the active form; persist its exact company/job/form step and remaining queue;
 archive confirmed folders; update the tracker summary and session counters. Then run
-`python skills/session_checkpoint.py set-mode stopped` followed by
-`python skills/session_checkpoint.py validate --expected-mode stopped`. The helper atomically
+`python scripts/runtime/checkpoint.py set-mode stopped` followed by
+`python scripts/runtime/checkpoint.py validate --expected-mode stopped`. The helper atomically
 updates `mode`, `last_stop_at`, and `last_updated`; confirm the cursor and queue in its output. Do
 not begin another application after stop is requested. Close the remaining browser page when the
 available controls support it; otherwise leave only the reused page and report that it could not be

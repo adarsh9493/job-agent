@@ -8,7 +8,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STATE = REPO_ROOT / "data" / "state" / "state.json"
 SESSION_COUNTERS = (
     "applied",

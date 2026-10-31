@@ -27,7 +27,7 @@ CodeLens in `.vscode/mcp.json`, then confirm its tools are available in Copilot 
 authenticate Gmail/MCPEmails in your VS Code user environment, then confirm the email tools are
 available. Use those tools only within the restrictions in `AGENTS.md`.
 
-In **Chat: Configure Skills**, confirm the workflow skills under `.github/skills/` are discovered.
+In **Chat: Configure Skills**, confirm the workflow skills under `agent/skills/` are discovered.
 If skills are disabled, enable the `chat.useAgentSkills` setting. Open the repository root as the
 workspace so `AGENTS.md` and the workspace MCP configuration are in scope.
 
@@ -55,4 +55,4 @@ permanently and review the session summary.
 - Use only company career portals. Search only for automotive ADAS/AD validation roles.
 - The agent must not submit an application when a legal/eligibility answer is unknown.
 - For the authoritative workflow and constraints, see `AGENTS.md` and the matching skill in
-  `.github/skills/`. Avoid maintaining a second copy of policy in setup documentation.
+  `agent/skills/`. Avoid maintaining a second copy of policy in setup documentation.

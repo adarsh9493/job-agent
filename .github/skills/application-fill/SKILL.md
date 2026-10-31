@@ -1,3 +1,5 @@
+<!-- GENERATED - do not edit. Source: agent/skills/application-fill/SKILL.md -->
+
 ﻿---
 name: application-fill
 description: Use when completing job applications in a visible browser. Submit autonomously after two-pass review, attach required and supported documents, reuse the answers bank, handle CAPTCHAs, and never guess on legal eligibility.
@@ -34,7 +36,7 @@ description: Use when completing job applications in a visible browser. Submit a
    status and continue. Never bypass a CAPTCHA.
 6. Apply the same submit review to every portal. Submit only after both pre-submit review passes
    in this skill and the applicable PDF checks pass.
-7. Save the confirmation screenshot in the job folder, run `python skills/documentation.py` once,
+7. Save the confirmation screenshot in the job folder, run `python scripts/runtime/archive.py` once,
    and update the tracker before moving to the next role. Then close the finished browser page when
    supported; otherwise reuse it for the next role and report if it cannot be closed at stop.
 
@@ -101,7 +103,7 @@ description: Use when completing job applications in a visible browser. Submit a
 ### Lucid Motors (embedded Greenhouse form) — lessons 2026-10-12 (app #14)
 
 - The Lucid careers page **embeds the Greenhouse form in an iframe** (`iframe[title="Greenhouse
-  Job Board"]`). All refs live inside that frame; Playwright MCP resolves them fine.
+  Job Board"]`). All refs live inside that frame; the browser tool resolves them fine.
 - **Phone Country is required and starts empty even though a flag is shown.** Appearing to have a
   default, the field's value is actually unset; Submit fails with a `Select a country` validation
   and *does not submit*. Always open the Country combobox and pick **"United States +1"** before
@@ -173,7 +175,7 @@ data or save the application for manual follow-up.
 10. If a visible reCAPTCHA challenge appears, stop and hand it to the user.
 
 Only when both passes are clean: **real-click** the Submit button (`.click()`, never keyboard
-Enter), wait for the confirmation page, save `confirmation_screenshot.png`, archive the folder to `history/` (`python skills/documentation.py`), then hand off.
+Enter), wait for the confirmation page, save `confirmation_screenshot.png`, archive the folder to `history/` (`python scripts/runtime/archive.py`), then hand off.
 
 ## Outputs
 

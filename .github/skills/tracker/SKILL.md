@@ -1,4 +1,5 @@
 ---
+# GENERATED - do not edit. Source: agent/skills/tracker/SKILL.md
 name: tracker
 description: Use when updating or reporting on application status. Maintain the Excel tracker, check narrowly scoped portal email responses, and summarize on start and stop.
 ---
@@ -63,7 +64,7 @@ Keep a **list data-validation dropdown** on `J2:J1000` restricted to these value
 1. **Read before every search** (duplicate prevention) and in the job-search dedup check. Match on
    Company + Job ID / Job URL / Title+Location.
 2. **Update after every application** — one row per job.
-3. **Watch Gmail continuously** (narrow queries — `AGENTS.md` rule 2: portal sender domain + `since`;
+3. **Watch the mailbox continuously** (narrow queries — `AGENTS.md` rule 2: portal sender domain + `since`;
    read **only** application responses, OTPs and confirmations from portals in use). Check at session
    start, **after every application**, after every burst, and at least every ~15–20 min while the
    session is running. Fold `Interview` / `Offer` / `Rejected` into `Status` **immediately**, add a

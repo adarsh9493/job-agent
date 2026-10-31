@@ -1,3 +1,5 @@
+<!-- GENERATED - do not edit. Source: agent/skills/tailoring/SKILL.md -->
+
 ﻿---
 name: tailoring
 description: Use when preparing application documents for a specific job. Create an ATS-friendly tailored resume and one-page cover letter from the master resume using only real experience.
@@ -87,10 +89,10 @@ ATS / fit rules:
 
 ## Match score (no floor — user directive 2026-10-14)
 
-Score with `skills/tailoring/scripts/match_score.py` **after rendering, before uploading**:
+Score with `scripts/tailoring/match_score.py` **after rendering, before uploading**:
 
 ```
-python skills/tailoring/scripts/match_score.py --jd <job folder>/job-description.md --resume <job folder>/<First>_<Last>_Resume.pdf
+python scripts/tailoring/match_score.py --jd <job folder>/job-description.md --resume <job folder>/<First>_<Last>_Resume.pdf
 ```
 
 1. **Target ≥70%.** If the draft scores under 70%, do another pass — do not stop at the first draft:
@@ -116,7 +118,7 @@ python skills/tailoring/scripts/match_score.py --jd <job folder>/job-description
 
 ## Quality checks (mandatory)
 
-- **Verify PDF content after rendering** with `skills/tailoring/scripts/verify_pdf.py`: the resume must
+- **Verify PDF content after rendering** with `scripts/tailoring/verify_pdf.py`: the resume must
   have at least 200 extracted characters and the cover letter at least 100; both must contain the
   profile's legal name and no unresolved `{{...}}` tokens.
 - If verification fails, **do not apply**. Regenerate the HTML properly (fill real data from profile/master), re-render, and re-verify before uploading.

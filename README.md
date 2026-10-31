@@ -1,8 +1,9 @@
 # Job Agent
 
-An autonomous, reusable job-application agent designed exclusively for GitHub Copilot in VS Code. It researches
-companies, finds fresh job postings on company career portals, tailors your resume and cover
-letter to each role, works through a visible browser, and tracks applications in an Excel workbook.
+An autonomous, reusable job-application agent that runs in any agent harness with a browser tool and
+a mail tool (VS Code/Copilot, Claude Code, OpenCode, or another). It researches companies, finds
+fresh job postings on company career portals, tailors your resume and cover letter to each role,
+works through a visible browser, and tracks applications in an Excel workbook.
 
 All personal data lives in `data/` and is **gitignored**, so this project can be published to
 GitHub for other users without exposing anyone's information.
@@ -14,10 +15,9 @@ details. Install and authenticate the required tools before the first run.
 
 ## How to start
 
-1. Open the repository root in VS Code and start a Copilot Agent session.
-2. Confirm the project skills appear in **Chat: Configure Skills** and the Playwright MCP server is
-   available in the MCP Servers view. This repository is configured for VS Code; it has no
-   OpenCode-specific setup.
+1. Open the repository root in your agent harness (VS Code with Copilot, Claude Code, OpenCode, ...).
+2. Confirm the workflow skills are discovered and the `playwright` MCP server is connected. Adapters
+   for each harness are generated; see [agent/TOOLS.md](agent/TOOLS.md) for the discovery paths.
 3. Say **`start`**.
 4. On the first run the agent walks you through **onboarding** (profile, work authorization,
    target roles, locations, answers bank) and builds your target company list.
@@ -41,29 +41,39 @@ details. Install and authenticate the required tools before the first run.
 ## Layout
 
 ```
-AGENTS.md         Core rules and control flow
-README.md         This file
-PREREQUISITES.md  Installed tools and versions
-.github/skills/   Copilot-discoverable workflow skills
-.vscode/mcp.json  Workspace Playwright MCP configuration
-skills/           Python helpers only; no duplicate SKILL.md files
+AGENTS.md         Core rules (the only policy file)
+CHANGELOG.md      Test state after every maintenance phase
+agent/            Canonical instructions - the only place to edit
+  skills/           the 8 workflow skills (+ reference/ files loaded on demand)
+  TOOLS.md          capability -> harness tool-name map
+  MODEL_POLICY.md   light vs heavy model tiers
+  mcp.json          canonical MCP servers
+scripts/          Executable helpers (no policy text)
+  runtime/          boot, state, answers, tracker, sweep, guard, presubmit, checkpoint, archive
+  scan/             fresh_scan
+  tailoring/        gen, build_all, render_pdf, verify_pdf, match_score
+  maintenance/      sync_adapters, context_report, validate_all, dry_run
 templates/        resume.html, cover-letter.html (ATS-friendly)
+tests/            contract tests + fixtures (never real data)
 data/             All personal + generated data (gitignored)
 ```
 
-The two `skills` locations have different jobs: `.github/skills/<name>/SKILL.md` contains
-Copilot-discoverable workflow instructions; `skills/` contains executable Python helpers, grouped
-by workflow area. Keep workflow guidance in the former and implementation in the latter.
+Generated adapters - never hand-edited, rebuilt by `scripts/maintenance/sync_adapters.py`:
+`.github/skills/`, `.github/copilot-instructions.md`, `.claude/skills/`, `CLAUDE.md`,
+`.vscode/mcp.json`, `.mcp.json`, `opencode.jsonc`.
+
+Edit `agent/` and run `python scripts/maintenance/sync_adapters.py`; the tests fail if an adapter
+drifts from canonical.
 
 ## Notes
 
 - The visible browser is used from portal login through final submission; everything else runs
   in the background.
-- Use the Copilot Agent `start` flow as the supported workflow; Python scripts are helper tools,
-  not a standalone application runner.
+- Use the `start` flow as the supported workflow; Python scripts are helper tools, not a
+  standalone application runner.
 - Search is strictly limited to eligible automotive ADAS/AD validation roles.
 - Before changing workflow instructions or helpers, run
-  `python -m unittest discover -s tests -v` to verify the workflow contract.
-- The session-control skill uses `python skills/session_checkpoint.py init` for first-run state,
+  `python scripts/maintenance/validate_all.py` (tests + adapters + budgets + dry run).
+- The session-control skill uses `python scripts/runtime/checkpoint.py init` for first-run state,
   `validate` to check a saved checkpoint, and `set-mode running|stopped` to atomically record
   lifecycle transitions.

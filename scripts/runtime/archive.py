@@ -5,7 +5,7 @@ import os
 import shutil
 import sys
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CURRENT_DIR = os.path.join(REPO_ROOT, "data", "applications", "current")
 HISTORY_DIR = os.path.join(REPO_ROOT, "data", "applications", "history")
 CONFIRMATION_FILE = "confirmation_screenshot.png"

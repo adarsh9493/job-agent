@@ -11,7 +11,7 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = PROJECT_ROOT / "data" / "profile" / "profile.json"
 TEMP = os.path.join(tempfile.gettempdir(), "job-agent")
 

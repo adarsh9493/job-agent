@@ -1,4 +1,5 @@
 ---
+# GENERATED - do not edit. Source: agent/skills/portal-login/SKILL.md
 name: portal-login
 description: Use when creating or logging in to career-portal accounts. Handle password resets and portal OTPs, reuse sessions, and store shared credentials in the vault.
 ---
@@ -14,7 +15,7 @@ description: Use when creating or logging in to career-portal accounts. Handle p
 - `data/profile/profile.json` — legal name, job email.
 - `data/profile/answers-bank.json`.
 - `data/vault/credentials.txt` — existing shared credentials.
-- Gmail MCP for OTPs and reset links.
+- Mail tool for OTPs and reset links.
 
 ## Steps
 
@@ -29,7 +30,7 @@ description: Use when creating or logging in to career-portal accounts. Handle p
 3. If no account exists, **create one** with the user's job email.
 4. If the account exists but no usable saved password is available, use "Forgot password" and reset
    it to the shared password. Update the vault only after the reset succeeds.
-5. Handle email verification / OTP by querying Gmail narrowly (sender domain + recent timestamp) and
+5. Handle email verification / OTP by querying the mailbox narrowly (sender domain + recent timestamp) and
    reading only the link or OTP (`AGENTS.md` rule 2).
 6. **PASSWORD_MODE = shared.** Use one password for **all** portal accounts (never the user's email
    password). Ask the user once, or generate a strong 16+ char password and tell them. Do not reset

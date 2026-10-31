@@ -1,4 +1,5 @@
 ---
+# GENERATED - do not edit. Source: agent/skills/job-search/SKILL.md
 name: job-search
 description: Use when searching approved company career portals for fresh ADAS/AD validation roles. Verify eligibility and duplicates, then queue eligible candidates.
 ---
@@ -39,7 +40,7 @@ current policy in `AGENTS.md`; it does not define a separate search policy.
    continue to the next role.
 7. Deduplicate against the tracker, prior applications, and current/history folders using company,
    job ID, URL, and title + location. Verify possible duplicates before queueing.
-8. Use `skills/job-search/scripts/fresh_scan.py` as the only automated posting scanner, and only to
+8. Use `scripts/scan/fresh_scan.py` as the only automated posting scanner, and only to
    discover candidates. A scanner hit is not an industry, ADAS/AD, eligibility, or duplicate
    approval; verify those from source pages. If a company has no scanner adapter or scanning fails,
    search its official career portal directly; no scan results do not mean no jobs exist.
@@ -55,7 +56,7 @@ current policy in `AGENTS.md`; it does not define a separate search policy.
 - Never use LinkedIn, Indeed, or Glassdoor as a job source.
 - Do not infer automotive industry or ADAS/AD relevance from a job title alone.
 - Do not queue product-development roles, people-manager roles, or roles the user is ineligible for.
-- Use `skills/job-search/scripts/sweep.py` only for approved-company order and active interview
+- Use `scripts/runtime/sweep.py` only for approved-company order and active interview
   blocking. It does not scan postings or enforce the freshness rule. There is no agent-imposed
   cooling period.
 - Apply sequentially, not in parallel.

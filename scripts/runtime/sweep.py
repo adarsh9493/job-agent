@@ -33,7 +33,7 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 
-PROJ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+PROJ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TRACKER = os.path.join(PROJ, "data", "tracker", "applications.xlsx")
 COMPANIES = os.path.join(PROJ, "data", "profile", "companies.md")
 STATE = os.path.join(PROJ, "data", "state", "state.json")

@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "playwright": {
+      "capability": "browser",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.84"]
+    }
+  }
+}

@@ -1,4 +1,5 @@
 ---
+# GENERATED - do not edit. Source: agent/skills/onboarding/SKILL.md
 name: onboarding
 description: Use on first run or when profile gaps appear. Read the master resume, collect profile and eligibility details in small batches, and store them in data/profile.
 ---
